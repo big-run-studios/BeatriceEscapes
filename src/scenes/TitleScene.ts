@@ -1,11 +1,13 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT, COLORS } from "../config/game";
-import { InputManager } from "../systems/InputManager";
+import { InputManager, Action } from "../systems/InputManager";
 
 export class TitleScene extends Phaser.Scene {
   private input_mgr!: InputManager;
   private controllerStatus!: Phaser.GameObjects.Text;
   private prompt!: Phaser.GameObjects.Text;
+  private ready = false;
+  private accepted = false;
 
   constructor() {
     super({ key: "TitleScene" });
@@ -13,6 +15,8 @@ export class TitleScene extends Phaser.Scene {
 
   create(): void {
     this.input_mgr = new InputManager(this);
+    this.ready = false;
+    this.accepted = false;
 
     const cx = GAME_WIDTH / 2;
     const cy = GAME_HEIGHT / 2;
@@ -32,7 +36,7 @@ export class TitleScene extends Phaser.Scene {
     });
     subtitle.setOrigin(0.5);
 
-    this.prompt = this.add.text(cx, cy + 120, "press ENTER or START", {
+    this.prompt = this.add.text(cx, cy + 120, "", {
       fontFamily: "Georgia, serif",
       fontSize: "20px",
       color: COLORS.accent,
@@ -76,6 +80,9 @@ export class TitleScene extends Phaser.Scene {
       delay: 1400,
       duration: 600,
       ease: "Power2",
+      onComplete: () => {
+        this.ready = true;
+      },
     });
 
     this.tweens.add({
@@ -90,6 +97,20 @@ export class TitleScene extends Phaser.Scene {
   }
 
   update(): void {
+    this.updateControllerStatus();
+    this.updatePromptLabel();
+
+    if (this.ready && !this.accepted) {
+      if (this.input_mgr.justPressed(Action.CONFIRM) || this.input_mgr.justPressed(Action.PAUSE)) {
+        this.accepted = true;
+        this.onStart();
+      }
+    }
+
+    this.input_mgr.postUpdate();
+  }
+
+  private updateControllerStatus(): void {
     if (this.input_mgr.gamepadConnected) {
       const name = this.input_mgr.gamepadName;
       const shortName = name.length > 40 ? name.substring(0, 37) + "..." : name;
@@ -99,7 +120,33 @@ export class TitleScene extends Phaser.Scene {
       this.controllerStatus.setText("No controller detected");
       this.controllerStatus.setColor(COLORS.subtitleText);
     }
+  }
 
-    this.input_mgr.postUpdate();
+  private updatePromptLabel(): void {
+    const confirmLabel = this.input_mgr.getLabel(Action.CONFIRM);
+    this.prompt.setText(`press ${confirmLabel}`);
+  }
+
+  private onStart(): void {
+    this.tweens.killAll();
+
+    const flash = this.add.rectangle(
+      GAME_WIDTH / 2, GAME_HEIGHT / 2,
+      GAME_WIDTH, GAME_HEIGHT,
+      0xffffff
+    );
+    flash.setAlpha(0);
+    flash.setDepth(100);
+
+    this.tweens.add({
+      targets: flash,
+      alpha: { from: 0.6, to: 0 },
+      duration: 400,
+      ease: "Power2",
+      onComplete: () => {
+        this.prompt.setText(`${this.input_mgr.getLabel(Action.CONFIRM)} pressed — ready for Layer 1`);
+        this.prompt.setAlpha(1);
+      },
+    });
   }
 }

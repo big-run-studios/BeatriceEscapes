@@ -26,7 +26,39 @@ interface KeyMapping {
   key: string;
 }
 
+export type InputDevice = "keyboard" | "gamepad";
+
 const STICK_DEADZONE = 0.3;
+
+const GAMEPAD_BUTTON_LABELS: Record<number, string> = {
+  0: "A",
+  1: "B",
+  2: "X",
+  3: "Y",
+  4: "LB",
+  5: "RB",
+  6: "LT",
+  7: "RT",
+  8: "Back",
+  9: "Start",
+  10: "L3",
+  11: "R3",
+  12: "D-Up",
+  13: "D-Down",
+  14: "D-Left",
+  15: "D-Right",
+};
+
+const KEY_DISPLAY_LABELS: Record<string, string> = {
+  ENTER: "Enter",
+  ESC: "Esc",
+  SPACE: "Space",
+  SHIFT: "Shift",
+  UP: "Up",
+  DOWN: "Down",
+  LEFT: "Left",
+  RIGHT: "Right",
+};
 
 const DEFAULT_GAMEPAD_MAP: ButtonMapping[] = [
   { action: Action.ATTACK, button: 0 },   // A / Cross
@@ -72,12 +104,22 @@ export class InputManager {
   private prevPadButtons: Map<number, boolean> = new Map();
   private _gamepadConnected = false;
   private _gamepadId = "";
+  private _lastDevice: InputDevice = "keyboard";
+  private _hasReceivedInput = false;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
     this.keyMap = DEFAULT_KEYBOARD_MAP;
     this.padMap = DEFAULT_GAMEPAD_MAP;
     this.setupKeyboard();
+  }
+
+  /** The most recently used input device. Defaults to gamepad if one is connected before any input. */
+  get lastDevice(): InputDevice {
+    if (!this._hasReceivedInput && this._gamepadConnected) {
+      return "gamepad";
+    }
+    return this._lastDevice;
   }
 
   private setupKeyboard(): void {
@@ -105,7 +147,7 @@ export class InputManager {
   }
 
   get gamepadConnected(): boolean {
-    this.pad; // refresh status
+    this.pad;
     return this._gamepadConnected;
   }
 
@@ -115,16 +157,50 @@ export class InputManager {
 
   /** True while the action's button/key is held down. */
   isDown(action: Action): boolean {
-    if (this.isKeyDown(action)) return true;
-    if (this.isPadDown(action)) return true;
+    if (this.isPadDown(action)) {
+      this.setDevice("gamepad");
+      return true;
+    }
+    if (this.isKeyDown(action)) {
+      this.setDevice("keyboard");
+      return true;
+    }
     return false;
   }
 
   /** True only on the frame the action's button/key was first pressed. */
   justPressed(action: Action): boolean {
-    if (this.isKeyJustDown(action)) return true;
-    if (this.isPadJustPressed(action)) return true;
+    if (this.isPadJustPressed(action)) {
+      this.setDevice("gamepad");
+      return true;
+    }
+    if (this.isKeyJustDown(action)) {
+      this.setDevice("keyboard");
+      return true;
+    }
     return false;
+  }
+
+  private setDevice(device: InputDevice): void {
+    this._lastDevice = device;
+    this._hasReceivedInput = true;
+  }
+
+  /** Returns the display label for an action based on the last-used input device. */
+  getLabel(action: Action): string {
+    if (this.lastDevice === "gamepad") {
+      for (const mapping of this.padMap) {
+        if (mapping.action === action) {
+          return GAMEPAD_BUTTON_LABELS[mapping.button] ?? `Button ${mapping.button}`;
+        }
+      }
+    }
+    for (const mapping of this.keyMap) {
+      if (mapping.action === action) {
+        return KEY_DISPLAY_LABELS[mapping.key] ?? mapping.key;
+      }
+    }
+    return "?";
   }
 
   /** Returns a normalized {x, y} vector for movement (stick + dpad + keyboard). */
@@ -141,6 +217,9 @@ export class InputManager {
     if (gamepad) {
       const lx = gamepad.axes.length > 0 ? gamepad.axes[0].getValue() : 0;
       const ly = gamepad.axes.length > 1 ? gamepad.axes[1].getValue() : 0;
+      if (Math.abs(lx) > STICK_DEADZONE || Math.abs(ly) > STICK_DEADZONE) {
+        this.setDevice("gamepad");
+      }
       if (Math.abs(lx) > STICK_DEADZONE) x = lx;
       if (Math.abs(ly) > STICK_DEADZONE) y = ly;
     }
@@ -167,18 +246,24 @@ export class InputManager {
 
   /** True if any action key/button was just pressed (useful for "press anything"). */
   anyJustPressed(): boolean {
-    if (this.scene.input.keyboard) {
-      for (const [, key] of this.keys) {
-        if (Phaser.Input.Keyboard.JustDown(key)) return true;
-      }
-    }
-
     const gamepad = this.pad;
     if (gamepad) {
       for (const mapping of this.padMap) {
         const btn = gamepad.buttons[mapping.button];
         const wasDown = this.prevPadButtons.get(mapping.button) ?? false;
-        if (btn && btn.pressed && !wasDown) return true;
+        if (btn && btn.pressed && !wasDown) {
+          this.setDevice("gamepad");
+          return true;
+        }
+      }
+    }
+
+    if (this.scene.input.keyboard) {
+      for (const [, key] of this.keys) {
+        if (Phaser.Input.Keyboard.JustDown(key)) {
+          this.setDevice("keyboard");
+          return true;
+        }
       }
     }
 
