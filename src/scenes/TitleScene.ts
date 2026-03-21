@@ -1,12 +1,19 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT, COLORS } from "../config/game";
+import { InputManager } from "../systems/InputManager";
 
 export class TitleScene extends Phaser.Scene {
+  private input_mgr!: InputManager;
+  private controllerStatus!: Phaser.GameObjects.Text;
+  private prompt!: Phaser.GameObjects.Text;
+
   constructor() {
     super({ key: "TitleScene" });
   }
 
   create(): void {
+    this.input_mgr = new InputManager(this);
+
     const cx = GAME_WIDTH / 2;
     const cy = GAME_HEIGHT / 2;
 
@@ -24,6 +31,21 @@ export class TitleScene extends Phaser.Scene {
       color: COLORS.subtitleText,
     });
     subtitle.setOrigin(0.5);
+
+    this.prompt = this.add.text(cx, cy + 120, "press ENTER or START", {
+      fontFamily: "Georgia, serif",
+      fontSize: "20px",
+      color: COLORS.accent,
+    });
+    this.prompt.setOrigin(0.5);
+    this.prompt.setAlpha(0);
+
+    this.controllerStatus = this.add.text(16, GAME_HEIGHT - 16, "", {
+      fontFamily: "monospace",
+      fontSize: "14px",
+      color: COLORS.subtitleText,
+    });
+    this.controllerStatus.setOrigin(0, 1);
 
     const version = this.add.text(GAME_WIDTH - 16, GAME_HEIGHT - 16, "B0.0.1", {
       fontFamily: "monospace",
@@ -47,5 +69,37 @@ export class TitleScene extends Phaser.Scene {
       duration: 800,
       ease: "Power2",
     });
+
+    this.tweens.add({
+      targets: this.prompt,
+      alpha: { from: 0, to: 1 },
+      delay: 1400,
+      duration: 600,
+      ease: "Power2",
+    });
+
+    this.tweens.add({
+      targets: this.prompt,
+      alpha: { from: 1, to: 0.3 },
+      delay: 2200,
+      duration: 800,
+      ease: "Sine.easeInOut",
+      yoyo: true,
+      repeat: -1,
+    });
+  }
+
+  update(): void {
+    if (this.input_mgr.gamepadConnected) {
+      const name = this.input_mgr.gamepadName;
+      const shortName = name.length > 40 ? name.substring(0, 37) + "..." : name;
+      this.controllerStatus.setText(`Controller: ${shortName}`);
+      this.controllerStatus.setColor(COLORS.accent);
+    } else {
+      this.controllerStatus.setText("No controller detected");
+      this.controllerStatus.setColor(COLORS.subtitleText);
+    }
+
+    this.input_mgr.postUpdate();
   }
 }
