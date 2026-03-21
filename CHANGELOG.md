@@ -17,6 +17,17 @@ Design doc versions use `D<major>.<minor>`. Build versions use `B0.<layer>.<patc
 - Onion development plan: 12 layers from bootable canvas to polished prototype.
 - Tech stack decision: Phaser 3 + TypeScript + Vite.
 
+## [B0.0.1] — 2026-03-21
+
+### Build — Layer 0: Bootable Canvas
+
+- Phaser 3 + TypeScript + Vite project scaffolded and running.
+- Title screen with "BEA ESCAPES" title, subtitle, and version display.
+- Fade-in animation on title and subtitle.
+- 1280x720 game canvas with responsive scaling (FIT + center).
+- GitHub Actions workflow for automatic GitHub Pages deployment.
+- `.gitignore`, `tsconfig.json`, `vite.config.ts` configured.
+
 ## [B0.0.0] — 2026-03-21
 
 ### Build
