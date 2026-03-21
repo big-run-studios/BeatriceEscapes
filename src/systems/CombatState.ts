@@ -1,4 +1,4 @@
-export type PlayerState = "idle" | "walk" | "light1" | "light2" | "light3" | "heavy" | "hitstop";
+export type PlayerState = "idle" | "walk" | "light1" | "light2" | "light3" | "heavy" | "jump" | "hitstop";
 
 export interface AttackData {
   duration: number;
@@ -24,6 +24,14 @@ export class CombatStateMachine {
     return this.state === "hitstop";
   }
 
+  get isJumping(): boolean {
+    return this.state === "jump";
+  }
+
+  get isBusy(): boolean {
+    return this.isAttacking || this.inHitstop || this.isJumping;
+  }
+
   update(dt: number): PlayerState | null {
     if (this.state === "hitstop") {
       this.hitstopRemaining -= dt * 1000;
@@ -45,6 +53,11 @@ export class CombatStateMachine {
     this.comboBuffered = false;
   }
 
+  enterJump(): void {
+    this.state = "jump";
+    this.stateTimer = 0;
+  }
+
   enterHitstop(durationMs: number): void {
     this.preHitstopState = this.state;
     this.state = "hitstop";
@@ -58,7 +71,7 @@ export class CombatStateMachine {
   }
 
   toWalk(): void {
-    if (!this.isAttacking && !this.inHitstop) {
+    if (!this.isBusy) {
       this.state = "walk";
       this.stateTimer = 0;
     }

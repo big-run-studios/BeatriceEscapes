@@ -21,15 +21,16 @@ Design doc versions use `D<major>.<minor>`. Build versions use `B0.<layer>.<patc
 
 ### Build — Layer 2: A Character That Attacks
 
-- CombatStateMachine: player states (idle, walk, light1/2/3, heavy, hitstop).
-- 3-hit light combo chain with buffered input — tap attack to chain hits.
-- Heavy attack with longer windup and bigger knockback values.
-- Hit-feel pipeline: hitstop (freeze frames on hit), camera screenshake (scaled by attack weight).
-- Visual feedback: swing arc VFX on attack, impact flash on hit frame, body squash/stretch during attacks.
-- Player stops moving during attacks (commitment to swings).
-- Hitstop vibrates player body for tactile frozen-frame feel.
-- HUD updated: shows attack and heavy button labels (auto-swaps keyboard/gamepad).
-- Combat config centralized in game.ts for easy tuning.
+- **Bea on Andrew's shoulders:** pink figure sitting on Andrew, she leans forward to deliver light attacks and the combo finisher. Andrew delivers heavy attacks. Visual identity established.
+- **PS5 controller layout:** Square = light attack (Bea), Triangle = heavy (Andrew), X = jump, Circle = block. All labels use PlayStation naming.
+- **3-hit light combo chain** with buffered input — Bea swings from the shoulders.
+- **Heavy attack** — Andrew's big swing with longer windup and bigger impact.
+- **Jump** — belt-scroll hop with gravity arc. Reduced air movement. Shadow shrinks during airtime.
+- **Training dummies** — 3 hittable targets with HP bars, hitstun shake, knockback physics, white flash on hit, death + auto-respawn after 1.5s. Delayed HP drain bar (red behind green).
+- **Hit detection** — player attacks connect with dummies based on range and depth proximity. Impact flash at hit point.
+- **Hit-feel pipeline:** hitstop freeze frames, camera screenshake (scaled by attack weight), swing arc VFX, impact flash.
+- **Combat state machine:** idle/walk/light1-3/heavy/jump/hitstop states.
+- **HUD:** shows move, attack, heavy, and jump controls with auto-swapping labels.
 
 ## [B0.1.0] — 2026-03-21
 

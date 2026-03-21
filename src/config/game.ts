@@ -16,6 +16,11 @@ export const PLAYER = {
   depthSpeed: 200,
 };
 
+export const JUMP = {
+  height: 100,
+  duration: 0.45,
+};
+
 export const COMBAT = {
   lightChain: [
     { duration: 0.3, hitFrame: 0.1, damage: 10, knockback: 80, hitstopMs: 40 },
@@ -37,6 +42,14 @@ export const COLORS = {
   accent: "#c9944a",
   andrewFill: 0x3a6b8a,
   andrewOutline: 0x5a9bba,
+  beaFill: 0xd4618a,
+  beaOutline: 0xf08aaa,
+  dummyFill: 0x5a4a3a,
+  dummyOutline: 0x7a6a5a,
+  dummyHit: 0xffffff,
+  hpBarBg: 0x1a1a1a,
+  hpBarFill: 0x44aa44,
+  hpBarDamage: 0xdd4444,
   groundFill: 0x1a1a2e,
   groundLine: 0x2a2a4e,
   wallFill: 0x0f0f20,

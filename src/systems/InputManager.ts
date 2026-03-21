@@ -9,6 +9,7 @@ export enum Action {
   HEAVY,
   SPECIAL,
   UTILITY,
+  JUMP,
   DODGE,
   BLOCK,
   CONFIRM,
@@ -31,16 +32,16 @@ export type InputDevice = "keyboard" | "gamepad";
 const STICK_DEADZONE = 0.3;
 
 const GAMEPAD_BUTTON_LABELS: Record<number, string> = {
-  0: "A",
-  1: "B",
-  2: "X",
-  3: "Y",
-  4: "LB",
-  5: "RB",
-  6: "LT",
-  7: "RT",
-  8: "Back",
-  9: "Start",
+  0: "X",          // Cross
+  1: "Circle",
+  2: "Square",
+  3: "Triangle",
+  4: "L1",
+  5: "R1",
+  6: "L2",
+  7: "R2",
+  8: "Share",
+  9: "Options",
   10: "L3",
   11: "R3",
   12: "D-Up",
@@ -61,19 +62,20 @@ const KEY_DISPLAY_LABELS: Record<string, string> = {
 };
 
 const DEFAULT_GAMEPAD_MAP: ButtonMapping[] = [
-  { action: Action.ATTACK, button: 0 },   // A / Cross
-  { action: Action.BACK, button: 1 },     // B / Circle
-  { action: Action.HEAVY, button: 2 },    // X / Square
-  { action: Action.UTILITY, button: 3 },  // Y / Triangle
-  { action: Action.BLOCK, button: 4 },    // LB / L1
-  { action: Action.DODGE, button: 5 },    // RB / R1
-  { action: Action.SPECIAL, button: 6 },  // LT / L2
-  { action: Action.PAUSE, button: 9 },    // Start
-  { action: Action.CONFIRM, button: 0 },  // A / Cross (same as attack — contextual)
-  { action: Action.UP, button: 12 },      // D-pad up
-  { action: Action.DOWN, button: 13 },    // D-pad down
-  { action: Action.LEFT, button: 14 },    // D-pad left
-  { action: Action.RIGHT, button: 15 },   // D-pad right
+  { action: Action.JUMP, button: 0 },      // X (Cross)
+  { action: Action.BLOCK, button: 1 },     // Circle — defensive action
+  { action: Action.ATTACK, button: 2 },    // Square — light attack (Bea)
+  { action: Action.HEAVY, button: 3 },     // Triangle — heavy attack (Andrew)
+  { action: Action.DODGE, button: 4 },     // L1
+  { action: Action.SPECIAL, button: 5 },   // R1
+  { action: Action.UTILITY, button: 6 },   // L2
+  { action: Action.PAUSE, button: 9 },     // Options
+  { action: Action.CONFIRM, button: 0 },   // X (Cross) — contextual confirm
+  { action: Action.BACK, button: 1 },      // Circle — contextual back
+  { action: Action.UP, button: 12 },
+  { action: Action.DOWN, button: 13 },
+  { action: Action.LEFT, button: 14 },
+  { action: Action.RIGHT, button: 15 },
 ];
 
 const DEFAULT_KEYBOARD_MAP: KeyMapping[] = [
@@ -88,9 +90,9 @@ const DEFAULT_KEYBOARD_MAP: KeyMapping[] = [
   { action: Action.ATTACK, key: "J" },
   { action: Action.HEAVY, key: "K" },
   { action: Action.SPECIAL, key: "L" },
-  { action: Action.UTILITY, key: "U" },
-  { action: Action.DODGE, key: "SPACE" },
+  { action: Action.JUMP, key: "SPACE" },
   { action: Action.BLOCK, key: "SHIFT" },
+  { action: Action.DODGE, key: "I" },
   { action: Action.CONFIRM, key: "ENTER" },
   { action: Action.BACK, key: "ESC" },
   { action: Action.PAUSE, key: "ESC" },
