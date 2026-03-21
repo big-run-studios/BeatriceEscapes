@@ -17,6 +17,23 @@ Design doc versions use `D<major>.<minor>`. Build versions use `B0.<layer>.<patc
 - Onion development plan: 12 layers from bootable canvas to polished prototype.
 - Tech stack decision: Phaser 3 + TypeScript + Vite.
 
+## [B0.3.0] — 2026-03-21
+
+### Build — Layer 3: Combo Tree, Projectiles, and Jump Tuning
+
+- **Branching combo trie** replaces flat combo chain. 10 distinct moves from mixing Square (L) and Triangle (H) inputs: L, LL, LLL, LLLL, H, HH, HHH, LH, HL, LLH, HHL, LLLH.
+- **Bea's wind shots** — all L-route attacks spawn projectile wind balls from Bea's position. Small balls for L/LL/LLL, medium charged ball for LLLL finisher.
+- **Andrew's haymakers** — H-route attacks are melee punches with big knockback and hitstop. Visual squash/stretch and head lunge.
+- **Mixed combos** — LH (Andrew uppercut), HL (Bea shoulder burst: 3 rapid-fire wind balls), LLH (Andrew slam), HHL (Bea magic finisher: gold blast projectile), LLLH (Bea toss: Bea launches off Andrew's shoulders as a projectile, returns after impact).
+- **HHH Bull Rush** — Andrew charges forward at 450px/s for 0.35s, hitting everything in the path.
+- **LLLH Bea Toss** — Bea disappears from shoulders, fires as a pink projectile, returns after 0.5s. High damage, huge knockback.
+- **Projectile system** — new `Projectile` entity with travel, trail VFX, range limit, fade-on-destroy, and per-projectile collision with dummies.
+- **Projectile impact VFX** — colored ring burst + white flash on projectile hits, distinct from melee impact flash.
+- **Jump tuning** — height increased to 180 (from 100), duration to 0.7s (from 0.45s). Floatier, more heroic arc.
+- **Visual poses per move** — 9 distinct animation poses driven by combo trie data: bea-cast, bea-big-cast, bea-burst, bea-finisher, bea-toss, andrew-punch, andrew-slam, andrew-rush, andrew-uppercut.
+- **Combo display HUD** — current combo ID shown on screen during attacks, fades out on return to idle.
+- **Data-driven combat** — all combo data lives in `COMBO_TREE` config. Adding moves requires zero code changes.
+
 ## [B0.2.0] — 2026-03-21
 
 ### Build — Layer 2: A Character That Attacks

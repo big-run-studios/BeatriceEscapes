@@ -17,22 +17,151 @@ export const PLAYER = {
 };
 
 export const JUMP = {
-  height: 100,
-  duration: 0.45,
+  height: 180,
+  duration: 0.7,
 };
 
+export type ComboInput = "L" | "H";
+export type MoveType = "projectile" | "melee" | "rush" | "toss" | "burst";
+export type VisualPose =
+  | "bea-cast"
+  | "bea-big-cast"
+  | "bea-burst"
+  | "bea-finisher"
+  | "bea-toss"
+  | "andrew-punch"
+  | "andrew-slam"
+  | "andrew-rush"
+  | "andrew-uppercut";
+
+export interface ComboNode {
+  id: string;
+  input: ComboInput;
+  duration: number;
+  hitFrame: number;
+  damage: number;
+  knockback: number;
+  hitstopMs: number;
+  moveType: MoveType;
+  visual: VisualPose;
+  shakeIntensity: number;
+  shakeDuration: number;
+  projectile?: { radius: number; speed: number; color: number; maxRange: number };
+  rush?: { speed: number; duration: number };
+  burstCount?: number;
+  children: ComboNode[];
+}
+
+const PROJ_SMALL = { radius: 8, speed: 500, color: 0x88ccff, maxRange: 400 };
+const PROJ_MEDIUM = { radius: 14, speed: 400, color: 0x55aaff, maxRange: 450 };
+const PROJ_BLAST = { radius: 16, speed: 350, color: 0xffcc44, maxRange: 500 };
+
+export const COMBO_TREE: ComboNode[] = [
+  // ── Square (L) branch: Bea wind shots ──
+  {
+    id: "L", input: "L",
+    duration: 0.28, hitFrame: 0.1, damage: 8, knockback: 40, hitstopMs: 30,
+    moveType: "projectile", visual: "bea-cast",
+    shakeIntensity: 1, shakeDuration: 30,
+    projectile: PROJ_SMALL,
+    children: [
+      {
+        id: "LL", input: "L",
+        duration: 0.24, hitFrame: 0.08, damage: 8, knockback: 40, hitstopMs: 30,
+        moveType: "projectile", visual: "bea-cast",
+        shakeIntensity: 1, shakeDuration: 30,
+        projectile: PROJ_SMALL,
+        children: [
+          {
+            id: "LLL", input: "L",
+            duration: 0.22, hitFrame: 0.07, damage: 10, knockback: 50, hitstopMs: 30,
+            moveType: "projectile", visual: "bea-cast",
+            shakeIntensity: 1, shakeDuration: 30,
+            projectile: PROJ_SMALL,
+            children: [
+              {
+                id: "LLLL", input: "L",
+                duration: 0.4, hitFrame: 0.15, damage: 20, knockback: 180, hitstopMs: 60,
+                moveType: "projectile", visual: "bea-big-cast",
+                shakeIntensity: 3, shakeDuration: 60,
+                projectile: PROJ_MEDIUM,
+                children: [],
+              },
+              {
+                id: "LLLH", input: "H",
+                duration: 0.55, hitFrame: 0.2, damage: 35, knockback: 350, hitstopMs: 90,
+                moveType: "toss", visual: "bea-toss",
+                shakeIntensity: 5, shakeDuration: 100,
+                children: [],
+              },
+            ],
+          },
+          {
+            id: "LLH", input: "H",
+            duration: 0.5, hitFrame: 0.22, damage: 28, knockback: 250, hitstopMs: 80,
+            moveType: "melee", visual: "andrew-slam",
+            shakeIntensity: 5, shakeDuration: 90,
+            children: [],
+          },
+        ],
+      },
+      {
+        id: "LH", input: "H",
+        duration: 0.45, hitFrame: 0.18, damage: 22, knockback: 200, hitstopMs: 60,
+        moveType: "melee", visual: "andrew-uppercut",
+        shakeIntensity: 4, shakeDuration: 70,
+        children: [],
+      },
+    ],
+  },
+  // ── Triangle (H) branch: Andrew haymakers ──
+  {
+    id: "H", input: "H",
+    duration: 0.5, hitFrame: 0.22, damage: 25, knockback: 200, hitstopMs: 80,
+    moveType: "melee", visual: "andrew-punch",
+    shakeIntensity: 4, shakeDuration: 70,
+    children: [
+      {
+        id: "HH", input: "H",
+        duration: 0.5, hitFrame: 0.22, damage: 25, knockback: 200, hitstopMs: 80,
+        moveType: "melee", visual: "andrew-punch",
+        shakeIntensity: 4, shakeDuration: 70,
+        children: [
+          {
+            id: "HHH", input: "H",
+            duration: 0.55, hitFrame: 0.1, damage: 30, knockback: 350, hitstopMs: 100,
+            moveType: "rush", visual: "andrew-rush",
+            shakeIntensity: 6, shakeDuration: 100,
+            rush: { speed: 450, duration: 0.35 },
+            children: [],
+          },
+          {
+            id: "HHL", input: "L",
+            duration: 0.5, hitFrame: 0.2, damage: 25, knockback: 280, hitstopMs: 80,
+            moveType: "projectile", visual: "bea-finisher",
+            shakeIntensity: 5, shakeDuration: 90,
+            projectile: PROJ_BLAST,
+            children: [],
+          },
+        ],
+      },
+      {
+        id: "HL", input: "L",
+        duration: 0.45, hitFrame: 0.1, damage: 8, knockback: 60, hitstopMs: 30,
+        moveType: "burst", visual: "bea-burst",
+        shakeIntensity: 2, shakeDuration: 40,
+        projectile: PROJ_SMALL,
+        burstCount: 3,
+        children: [],
+      },
+    ],
+  },
+];
+
 export const COMBAT = {
-  lightChain: [
-    { duration: 0.3, hitFrame: 0.1, damage: 10, knockback: 80, hitstopMs: 40 },
-    { duration: 0.3, hitFrame: 0.1, damage: 12, knockback: 100, hitstopMs: 50 },
-    { duration: 0.4, hitFrame: 0.12, damage: 18, knockback: 200, hitstopMs: 70 },
-  ],
-  heavy: { duration: 0.55, hitFrame: 0.25, damage: 30, knockback: 300, hitstopMs: 100 },
-  comboWindow: 0.25,
-  hitRange: 70,
-  hitDepthRange: 30,
-  shakeIntensity: { light: 2, heavy: 5, finisher: 4 },
-  shakeDuration: { light: 50, heavy: 100, finisher: 80 },
+  comboWindow: 0.3,
+  meleeHitRange: 70,
+  meleeHitDepthRange: 30,
 };
 
 export const COLORS = {

@@ -1,23 +1,19 @@
-export type PlayerState = "idle" | "walk" | "light1" | "light2" | "light3" | "heavy" | "jump" | "hitstop";
+import { ComboNode, ComboInput, COMBO_TREE } from "../config/game";
 
-export interface AttackData {
-  duration: number;
-  hitFrame: number;
-  damage: number;
-  knockback: number;
-  hitstopMs: number;
-}
+export type PlayerState = "idle" | "walk" | "attacking" | "jump" | "hitstop";
 
 export class CombatStateMachine {
   state: PlayerState = "idle";
   stateTimer = 0;
   hasHitThisSwing = false;
-  comboBuffered = false;
+  currentNode: ComboNode | null = null;
+  private bufferedInput: ComboInput | null = null;
   private hitstopRemaining = 0;
   private preHitstopState: PlayerState = "idle";
+  private preHitstopNode: ComboNode | null = null;
 
   get isAttacking(): boolean {
-    return this.state === "light1" || this.state === "light2" || this.state === "light3" || this.state === "heavy";
+    return this.state === "attacking";
   }
 
   get inHitstop(): boolean {
@@ -32,42 +28,64 @@ export class CombatStateMachine {
     return this.isAttacking || this.inHitstop || this.isJumping;
   }
 
-  update(dt: number): PlayerState | null {
+  update(dt: number): void {
     if (this.state === "hitstop") {
       this.hitstopRemaining -= dt * 1000;
       if (this.hitstopRemaining <= 0) {
         this.state = this.preHitstopState;
-        return null;
+        this.currentNode = this.preHitstopNode;
       }
-      return null;
+      return;
     }
-
     this.stateTimer += dt;
+  }
+
+  bufferInput(input: ComboInput): void {
+    if (this.state === "attacking" || this.state === "hitstop") {
+      this.bufferedInput = input;
+    }
+  }
+
+  /** Start a new combo from idle with the given input. Returns the node entered. */
+  startCombo(input: ComboInput): ComboNode | null {
+    const root = COMBO_TREE.find((n) => n.input === input);
+    if (!root) return null;
+    this.enterNode(root);
+    return root;
+  }
+
+  /** Try to advance the combo. Returns the new node if successful, null otherwise. */
+  advanceCombo(): ComboNode | null {
+    if (!this.bufferedInput || !this.currentNode) return null;
+
+    const next = this.currentNode.children.find((c) => c.input === this.bufferedInput);
+    this.bufferedInput = null;
+
+    if (next) {
+      this.enterNode(next);
+      return next;
+    }
     return null;
   }
 
-  enterAttack(state: PlayerState): void {
-    this.state = state;
-    this.stateTimer = 0;
-    this.hasHitThisSwing = false;
-    this.comboBuffered = false;
+  enterHitstop(durationMs: number): void {
+    this.preHitstopState = this.state;
+    this.preHitstopNode = this.currentNode;
+    this.state = "hitstop";
+    this.hitstopRemaining = durationMs;
   }
 
   enterJump(): void {
     this.state = "jump";
     this.stateTimer = 0;
-  }
-
-  enterHitstop(durationMs: number): void {
-    this.preHitstopState = this.state;
-    this.state = "hitstop";
-    this.hitstopRemaining = durationMs;
+    this.currentNode = null;
   }
 
   toIdle(): void {
     this.state = "idle";
     this.stateTimer = 0;
-    this.comboBuffered = false;
+    this.currentNode = null;
+    this.bufferedInput = null;
   }
 
   toWalk(): void {
@@ -75,5 +93,13 @@ export class CombatStateMachine {
       this.state = "walk";
       this.stateTimer = 0;
     }
+  }
+
+  private enterNode(node: ComboNode): void {
+    this.state = "attacking";
+    this.stateTimer = 0;
+    this.hasHitThisSwing = false;
+    this.currentNode = node;
+    this.bufferedInput = null;
   }
 }

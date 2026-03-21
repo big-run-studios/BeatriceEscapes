@@ -1,15 +1,18 @@
 import Phaser from "phaser";
-import { GAME_WIDTH, GAME_HEIGHT, ARENA, COLORS } from "../config/game";
+import { GAME_WIDTH, GAME_HEIGHT, ARENA, COLORS, COMBAT } from "../config/game";
 import { InputManager, Action } from "../systems/InputManager";
 import { HitFeel } from "../systems/HitFeel";
 import { Player } from "../entities/Player";
 import { TrainingDummy } from "../entities/TrainingDummy";
+import { Projectile } from "../entities/Projectile";
 
 export class ArenaScene extends Phaser.Scene {
   private input_mgr!: InputManager;
   private hitFeel!: HitFeel;
   private player!: Player;
   private dummies: TrainingDummy[] = [];
+  private projectiles: Projectile[] = [];
+  private comboDisplay!: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: "ArenaScene" });
@@ -34,15 +37,32 @@ export class ArenaScene extends Phaser.Scene {
     const dt = delta / 1000;
     this.player.update(dt);
 
+    this.processProjectileSpawns();
+
     for (const dummy of this.dummies) {
       dummy.update(dt);
     }
 
-    this.checkHits();
+    for (const proj of this.projectiles) {
+      proj.update(dt);
+    }
+
+    this.checkMeleeHits();
+    this.checkProjectileHits();
+    this.pruneDeadProjectiles();
+    this.updateComboDisplay();
     this.input_mgr.postUpdate();
   }
 
-  private checkHits(): void {
+  private processProjectileSpawns(): void {
+    const reqs = this.player.drainProjectileRequests();
+    for (const req of reqs) {
+      const proj = new Projectile(this, req.x, req.y, req.facingRight, req.config);
+      this.projectiles.push(proj);
+    }
+  }
+
+  private checkMeleeHits(): void {
     const hitBox = this.player.getHitBox();
     if (!hitBox) return;
 
@@ -55,15 +75,58 @@ export class ArenaScene extends Phaser.Scene {
       if (dx < hitBox.range + dummy.width / 2 && dy < hitBox.depthRange + dummy.height / 4) {
         const dir = this.player.facingRight ? 1 : -1;
         dummy.takeHit(
-          hitBox.data.damage,
-          dir * hitBox.data.knockback,
+          hitBox.damage,
+          dir * hitBox.knockback,
           (Math.random() - 0.5) * 30
         );
 
         this.hitFeel.impactFlash(dummy.x, dummy.y - dummy.height / 3);
+        this.hitFeel.shake(hitBox.shakeIntensity, hitBox.shakeDuration);
         this.player.markHitConnected();
         break;
       }
+    }
+  }
+
+  private checkProjectileHits(): void {
+    for (const proj of this.projectiles) {
+      if (!proj.alive) continue;
+
+      for (const dummy of this.dummies) {
+        if (!dummy.isAlive) continue;
+
+        const dx = Math.abs(proj.x - dummy.x);
+        const dy = Math.abs(proj.worldY - dummy.y);
+
+        if (dx < proj.radius + dummy.width / 2 && dy < COMBAT.meleeHitDepthRange + dummy.height / 4) {
+          const dir = proj.x < dummy.x ? 1 : -1;
+          dummy.takeHit(
+            proj.damage,
+            dir * proj.knockback,
+            (Math.random() - 0.5) * 20
+          );
+
+          this.hitFeel.projectileImpact(dummy.x, dummy.y - dummy.height / 3, proj.circle.fillColor);
+          this.hitFeel.shake(proj.shakeIntensity, proj.shakeDuration);
+          proj.destroy();
+          break;
+        }
+      }
+    }
+  }
+
+  private pruneDeadProjectiles(): void {
+    this.projectiles = this.projectiles.filter((p) => p.alive);
+  }
+
+  private updateComboDisplay(): void {
+    const comboId = this.player.currentComboId;
+
+    if (comboId) {
+      this.comboDisplay.setText(comboId);
+      this.comboDisplay.setAlpha(1);
+    } else if (this.comboDisplay.alpha > 0) {
+      this.comboDisplay.setAlpha(this.comboDisplay.alpha - 0.05);
     }
   }
 
@@ -144,7 +207,7 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private addHUD(): void {
-    const version = this.add.text(GAME_WIDTH - 16, GAME_HEIGHT - 16, "B0.2.0", {
+    const version = this.add.text(GAME_WIDTH - 16, GAME_HEIGHT - 16, "B0.3.0", {
       fontFamily: "monospace",
       fontSize: "14px",
       color: COLORS.subtitleText,
@@ -162,6 +225,17 @@ export class ArenaScene extends Phaser.Scene {
     controlHint.setScrollFactor(0);
     controlHint.setDepth(20000);
 
+    this.comboDisplay = this.add.text(GAME_WIDTH / 2, 60, "", {
+      fontFamily: "monospace",
+      fontSize: "18px",
+      color: COLORS.accent,
+      fontStyle: "bold",
+    });
+    this.comboDisplay.setOrigin(0.5);
+    this.comboDisplay.setScrollFactor(0);
+    this.comboDisplay.setDepth(20000);
+    this.comboDisplay.setAlpha(0);
+
     this.time.addEvent({
       delay: 200,
       loop: true,
@@ -171,7 +245,7 @@ export class ArenaScene extends Phaser.Scene {
         const atk = this.input_mgr.getLabel(Action.ATTACK);
         const hvy = this.input_mgr.getLabel(Action.HEAVY);
         const jmp = this.input_mgr.getLabel(Action.JUMP);
-        controlHint.setText(`Move: ${move}  |  Attack: ${atk}  |  Heavy: ${hvy}  |  Jump: ${jmp}`);
+        controlHint.setText(`Move: ${move}  |  Light: ${atk}  |  Heavy: ${hvy}  |  Jump: ${jmp}`);
       },
     });
   }

@@ -26,6 +26,35 @@ export class HitFeel {
     });
   }
 
+  /** Spawn a colored projectile impact burst at world position. */
+  projectileImpact(x: number, y: number, color: number): void {
+    const ring = this.scene.add.circle(x, y, 12, color, 0);
+    ring.setStrokeStyle(3, color, 0.9);
+    ring.setDepth(y + 2);
+
+    const flash = this.scene.add.circle(x, y, 8, 0xffffff, 0.9);
+    flash.setDepth(y + 3);
+
+    this.scene.tweens.add({
+      targets: ring,
+      scaleX: 2.5,
+      scaleY: 2.5,
+      alpha: 0,
+      duration: 200,
+      ease: "Power2",
+      onComplete: () => ring.destroy(),
+    });
+    this.scene.tweens.add({
+      targets: flash,
+      alpha: 0,
+      scaleX: 1.8,
+      scaleY: 1.8,
+      duration: 120,
+      ease: "Power2",
+      onComplete: () => flash.destroy(),
+    });
+  }
+
   /** Spawn a swing arc visual at world position. */
   swingArc(x: number, y: number, facingRight: boolean, heavy: boolean): void {
     const gfx = this.scene.add.graphics();
