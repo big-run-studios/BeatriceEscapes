@@ -130,23 +130,9 @@ export class TitleScene extends Phaser.Scene {
   private onStart(): void {
     this.tweens.killAll();
 
-    const flash = this.add.rectangle(
-      GAME_WIDTH / 2, GAME_HEIGHT / 2,
-      GAME_WIDTH, GAME_HEIGHT,
-      0xffffff
-    );
-    flash.setAlpha(0);
-    flash.setDepth(100);
-
-    this.tweens.add({
-      targets: flash,
-      alpha: { from: 0.6, to: 0 },
-      duration: 400,
-      ease: "Power2",
-      onComplete: () => {
-        this.prompt.setText(`${this.input_mgr.getLabel(Action.CONFIRM)} pressed — ready for Layer 1`);
-        this.prompt.setAlpha(1);
-      },
+    this.cameras.main.fadeOut(400, 0, 0, 0);
+    this.cameras.main.once("camerafadeoutcomplete", () => {
+      this.scene.start("ArenaScene");
     });
   }
 }
