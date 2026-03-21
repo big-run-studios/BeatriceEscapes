@@ -1,10 +1,12 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT, ARENA, COLORS } from "../config/game";
-import { InputManager } from "../systems/InputManager";
+import { InputManager, Action } from "../systems/InputManager";
+import { HitFeel } from "../systems/HitFeel";
 import { Player } from "../entities/Player";
 
 export class ArenaScene extends Phaser.Scene {
   private input_mgr!: InputManager;
+  private hitFeel!: HitFeel;
   private player!: Player;
 
   constructor() {
@@ -13,12 +15,13 @@ export class ArenaScene extends Phaser.Scene {
 
   create(): void {
     this.input_mgr = new InputManager(this);
+    this.hitFeel = new HitFeel(this);
 
     this.drawArena();
 
     const startX = ARENA.width / 2;
     const startY = ARENA.groundY + ARENA.groundHeight / 2;
-    this.player = new Player(this, startX, startY, this.input_mgr);
+    this.player = new Player(this, startX, startY, this.input_mgr, this.hitFeel);
 
     this.setupCamera();
 
@@ -100,7 +103,7 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private addHUD(): void {
-    const version = this.add.text(GAME_WIDTH - 16, GAME_HEIGHT - 16, "B0.1.0", {
+    const version = this.add.text(GAME_WIDTH - 16, GAME_HEIGHT - 16, "B0.2.0", {
       fontFamily: "monospace",
       fontSize: "14px",
       color: COLORS.subtitleText,
@@ -123,7 +126,9 @@ export class ArenaScene extends Phaser.Scene {
       loop: true,
       callback: () => {
         const moveLabel = this.input_mgr.lastDevice === "gamepad" ? "L-Stick / D-Pad" : "WASD / Arrows";
-        controlHint.setText(`Move: ${moveLabel}`);
+        const atkLabel = this.input_mgr.getLabel(Action.ATTACK);
+        const hvyLabel = this.input_mgr.getLabel(Action.HEAVY);
+        controlHint.setText(`Move: ${moveLabel}  |  Attack: ${atkLabel}  |  Heavy: ${hvyLabel}`);
       },
     });
   }

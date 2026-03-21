@@ -16,6 +16,20 @@ export const PLAYER = {
   depthSpeed: 200,
 };
 
+export const COMBAT = {
+  lightChain: [
+    { duration: 0.3, hitFrame: 0.1, damage: 10, knockback: 80, hitstopMs: 40 },
+    { duration: 0.3, hitFrame: 0.1, damage: 12, knockback: 100, hitstopMs: 50 },
+    { duration: 0.4, hitFrame: 0.12, damage: 18, knockback: 200, hitstopMs: 70 },
+  ],
+  heavy: { duration: 0.55, hitFrame: 0.25, damage: 30, knockback: 300, hitstopMs: 100 },
+  comboWindow: 0.25,
+  hitRange: 70,
+  hitDepthRange: 30,
+  shakeIntensity: { light: 2, heavy: 5, finisher: 4 },
+  shakeDuration: { light: 50, heavy: 100, finisher: 80 },
+};
+
 export const COLORS = {
   background: 0x0a0a1a,
   titleText: "#e8d5b5",

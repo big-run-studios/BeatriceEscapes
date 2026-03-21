@@ -17,6 +17,20 @@ Design doc versions use `D<major>.<minor>`. Build versions use `B0.<layer>.<patc
 - Onion development plan: 12 layers from bootable canvas to polished prototype.
 - Tech stack decision: Phaser 3 + TypeScript + Vite.
 
+## [B0.2.0] — 2026-03-21
+
+### Build — Layer 2: A Character That Attacks
+
+- CombatStateMachine: player states (idle, walk, light1/2/3, heavy, hitstop).
+- 3-hit light combo chain with buffered input — tap attack to chain hits.
+- Heavy attack with longer windup and bigger knockback values.
+- Hit-feel pipeline: hitstop (freeze frames on hit), camera screenshake (scaled by attack weight).
+- Visual feedback: swing arc VFX on attack, impact flash on hit frame, body squash/stretch during attacks.
+- Player stops moving during attacks (commitment to swings).
+- Hitstop vibrates player body for tactile frozen-frame feel.
+- HUD updated: shows attack and heavy button labels (auto-swaps keyboard/gamepad).
+- Combat config centralized in game.ts for easy tuning.
+
 ## [B0.1.0] — 2026-03-21
 
 ### Build — Layer 1: A Character That Moves
