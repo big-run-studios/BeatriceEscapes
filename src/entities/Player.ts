@@ -22,6 +22,7 @@ export interface MeleeHitBox {
   hitstopMs: number;
   shakeIntensity: number;
   shakeDuration: number;
+  isRush: boolean;
 }
 
 export class Player {
@@ -203,13 +204,30 @@ export class Player {
   /** Returns hit info for melee attacks only. Projectiles handle their own collision. */
   getHitBox(): MeleeHitBox | null {
     const s = this.combat;
-    if (!s.isAttacking || s.hasHitThisSwing) return null;
+    if (!s.isAttacking) return null;
 
     const node = s.currentNode;
     if (!node) return null;
 
-    // Only melee and rush produce a melee hitbox
-    if (node.moveType !== "melee" && node.moveType !== "rush") return null;
+    if (node.moveType === "rush") {
+      if (this.rushTimer <= 0) return null;
+      const dir = this.facingRight ? 1 : -1;
+      return {
+        x: this.container.x + dir * COMBAT.meleeHitRange,
+        y: this.container.y,
+        range: COMBAT.meleeHitRange + 20,
+        depthRange: COMBAT.meleeHitDepthRange,
+        damage: node.damage,
+        knockback: node.knockback,
+        hitstopMs: node.hitstopMs,
+        shakeIntensity: node.shakeIntensity,
+        shakeDuration: node.shakeDuration,
+        isRush: true,
+      };
+    }
+
+    if (node.moveType !== "melee") return null;
+    if (s.hasHitThisSwing) return null;
     if (s.stateTimer < node.hitFrame) return null;
 
     const dir = this.facingRight ? 1 : -1;
@@ -223,6 +241,7 @@ export class Player {
       hitstopMs: node.hitstopMs,
       shakeIntensity: node.shakeIntensity,
       shakeDuration: node.shakeDuration,
+      isRush: false,
     };
   }
 

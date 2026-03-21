@@ -36,6 +36,7 @@ export type VisualPose =
 
 export interface ComboNode {
   id: string;
+  name: string;
   input: ComboInput;
   duration: number;
   hitFrame: number;
@@ -59,28 +60,28 @@ const PROJ_BLAST = { radius: 16, speed: 350, color: 0xffcc44, maxRange: 500 };
 export const COMBO_TREE: ComboNode[] = [
   // ── Square (L) branch: Bea wind shots ──
   {
-    id: "L", input: "L",
+    id: "L", name: "Wind Shot", input: "L",
     duration: 0.28, hitFrame: 0.1, damage: 8, knockback: 40, hitstopMs: 30,
     moveType: "projectile", visual: "bea-cast",
     shakeIntensity: 1, shakeDuration: 30,
     projectile: PROJ_SMALL,
     children: [
       {
-        id: "LL", input: "L",
+        id: "LL", name: "Wind Shot 2", input: "L",
         duration: 0.24, hitFrame: 0.08, damage: 8, knockback: 40, hitstopMs: 30,
         moveType: "projectile", visual: "bea-cast",
         shakeIntensity: 1, shakeDuration: 30,
         projectile: PROJ_SMALL,
         children: [
           {
-            id: "LLL", input: "L",
+            id: "LLL", name: "Wind Shot 3", input: "L",
             duration: 0.22, hitFrame: 0.07, damage: 10, knockback: 50, hitstopMs: 30,
             moveType: "projectile", visual: "bea-cast",
             shakeIntensity: 1, shakeDuration: 30,
             projectile: PROJ_SMALL,
             children: [
               {
-                id: "LLLL", input: "L",
+                id: "LLLL", name: "Big Wind Ball", input: "L",
                 duration: 0.4, hitFrame: 0.15, damage: 20, knockback: 180, hitstopMs: 60,
                 moveType: "projectile", visual: "bea-big-cast",
                 shakeIntensity: 3, shakeDuration: 60,
@@ -88,7 +89,7 @@ export const COMBO_TREE: ComboNode[] = [
                 children: [],
               },
               {
-                id: "LLLH", input: "H",
+                id: "LLLH", name: "Bea Toss", input: "H",
                 duration: 0.55, hitFrame: 0.2, damage: 35, knockback: 350, hitstopMs: 90,
                 moveType: "toss", visual: "bea-toss",
                 shakeIntensity: 5, shakeDuration: 100,
@@ -97,7 +98,7 @@ export const COMBO_TREE: ComboNode[] = [
             ],
           },
           {
-            id: "LLH", input: "H",
+            id: "LLH", name: "Slam", input: "H",
             duration: 0.5, hitFrame: 0.22, damage: 28, knockback: 250, hitstopMs: 80,
             moveType: "melee", visual: "andrew-slam",
             shakeIntensity: 5, shakeDuration: 90,
@@ -106,7 +107,7 @@ export const COMBO_TREE: ComboNode[] = [
         ],
       },
       {
-        id: "LH", input: "H",
+        id: "LH", name: "Uppercut", input: "H",
         duration: 0.45, hitFrame: 0.18, damage: 22, knockback: 200, hitstopMs: 60,
         moveType: "melee", visual: "andrew-uppercut",
         shakeIntensity: 4, shakeDuration: 70,
@@ -116,27 +117,27 @@ export const COMBO_TREE: ComboNode[] = [
   },
   // ── Triangle (H) branch: Andrew haymakers ──
   {
-    id: "H", input: "H",
+    id: "H", name: "Haymaker", input: "H",
     duration: 0.5, hitFrame: 0.22, damage: 25, knockback: 200, hitstopMs: 80,
     moveType: "melee", visual: "andrew-punch",
     shakeIntensity: 4, shakeDuration: 70,
     children: [
       {
-        id: "HH", input: "H",
+        id: "HH", name: "Haymaker 2", input: "H",
         duration: 0.5, hitFrame: 0.22, damage: 25, knockback: 200, hitstopMs: 80,
         moveType: "melee", visual: "andrew-punch",
         shakeIntensity: 4, shakeDuration: 70,
         children: [
           {
-            id: "HHH", input: "H",
-            duration: 0.55, hitFrame: 0.1, damage: 30, knockback: 350, hitstopMs: 100,
+            id: "HHH", name: "Bull Rush", input: "H",
+            duration: 0.55, hitFrame: 0.05, damage: 30, knockback: 350, hitstopMs: 60,
             moveType: "rush", visual: "andrew-rush",
             shakeIntensity: 6, shakeDuration: 100,
-            rush: { speed: 450, duration: 0.35 },
+            rush: { speed: 450, duration: 0.5 },
             children: [],
           },
           {
-            id: "HHL", input: "L",
+            id: "HHL", name: "Magic Finisher", input: "L",
             duration: 0.5, hitFrame: 0.2, damage: 25, knockback: 280, hitstopMs: 80,
             moveType: "projectile", visual: "bea-finisher",
             shakeIntensity: 5, shakeDuration: 90,
@@ -146,7 +147,7 @@ export const COMBO_TREE: ComboNode[] = [
         ],
       },
       {
-        id: "HL", input: "L",
+        id: "HL", name: "Shoulder Burst", input: "L",
         duration: 0.45, hitFrame: 0.1, damage: 8, knockback: 60, hitstopMs: 30,
         moveType: "burst", visual: "bea-burst",
         shakeIntensity: 2, shakeDuration: 40,
@@ -160,8 +161,8 @@ export const COMBO_TREE: ComboNode[] = [
 
 export const COMBAT = {
   comboWindow: 0.3,
-  meleeHitRange: 70,
-  meleeHitDepthRange: 30,
+  meleeHitRange: 80,
+  meleeHitDepthRange: 55,
 };
 
 export const COLORS = {
