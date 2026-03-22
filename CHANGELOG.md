@@ -6,6 +6,27 @@ Design doc versions use `D<major>.<minor>`. Build versions use `B0.<layer>.<patc
 
 ---
 
+## [B0.5.0] — 2026-03-21
+
+### Build — Layer 5: Core Gameplay Loop
+
+- **Double-tap dash** — tap a direction twice within 250ms to burst forward with i-frames and afterimage trail. 0.22s duration, 0.3s cooldown. Cannot attack during dash.
+- **Hub Scene (Birthday Party HQ)** — menu-based hub replaces direct arena launch. Three panels:
+  - **Character Select** — Andrew & Bea playable; John, Heather, Luna as locked "Coming Soon" slots.
+  - **Mode Select** — "Fight Dummies" (training) or "Fight Enemies" (wave run).
+  - **Wave Config** — choose starting enemy count (1-5) and starting level (1-5). 3-wave run with escalation preview.
+- **Robot enemies** — metallic gray body + red visor. AI state machine: idle → chase → windup (flashing telegraph) → attack → recover. Stats scale by level (HP x1-x2.5, damage x1-x2, speed x1-x1.5).
+- **Multi-wave combat** — 3 waves per run, escalating count and level (capped at 5 each). "WAVE CLEAR!" announcement between waves with brief pause. "RUN COMPLETE!" on victory with money earned display.
+- **Player knockdown system** — enemies can damage the player. Hitstun (0.3s stagger), knockdown (falls flat for 1.3s total), recovery (0.6s i-frames with flashing). Block reduces damage by 70%.
+- **Roguelike knockout loop** — when HP reaches 0, player falls, then Bea pops up and says "Again!" in pink italic text. Fades back to Hub. Money resets.
+- **Per-run money** — earned by defeating enemies ($1.00 base + $0.50 per level). Displayed in HUD as USD format. Resets on knockout or run completion.
+- **HP pickup snacks** — enemies have 25% chance to drop a random kid snack on death: Goldfish, Juice Box, Fruit Snacks, Apple Slices, or String Cheese. Heals 25 HP on collection. Bob animation, sparkle VFX, 10s despawn timer with flash warning.
+- **New player states** — dashing, hitstun, knockdown, recovering, dead added to combat state machine. `isVulnerable` getter for i-frame checks.
+- **Scene flow** — Title → Hub → Arena (with config) → Hub (on knockout or victory). Fade transitions between all scenes.
+- **HUD updates** — money display (top-right), wave counter, dash in control hints and special moves list.
+
+---
+
 ## [D1.0] — 2026-03-21
 
 ### Design

@@ -163,6 +163,7 @@ export const COMBAT = {
   comboWindow: 0.3,
   meleeHitRange: 80,
   meleeHitDepthRange: 55,
+  blockSpeedMultiplier: 0.25,
 };
 
 export const AIR_ATTACK = {
@@ -203,6 +204,57 @@ export const ULTIMATE = {
   recoveryDuration: 1.0,
 };
 
+export const DASH = {
+  doubleTapWindow: 0.25,
+  speed: 750,
+  duration: 0.22,
+  cooldown: 0.3,
+};
+
+export const ENEMY = {
+  width: 40,
+  height: 70,
+  baseHp: 60,
+  baseDamage: 10,
+  baseSpeed: 80,
+  hpPerLevel: 0.375,
+  damagePerLevel: 0.25,
+  speedPerLevel: 0.125,
+  attackRange: 65,
+  attackDepthRange: 40,
+  windupDuration: 0.5,
+  attackDuration: 0.25,
+  recoverDuration: 0.4,
+  hitstunDuration: 0.35,
+  knockbackFriction: 500,
+  deathDuration: 0.4,
+};
+
+export const PICKUP = {
+  healAmount: 25,
+  collectRadius: 40,
+  despawnTime: 10,
+  bobSpeed: 3,
+  bobAmount: 4,
+};
+
+export const RUN = {
+  baseMoneyPerKill: 1.0,
+  moneyPerLevel: 0.5,
+  snackDropChance: 0.25,
+  waveCount: 3,
+  wavePauseDuration: 2.0,
+};
+
+export const PLAYER_HIT = {
+  hitstunDuration: 0.3,
+  knockdownDuration: 0.5,
+  knockdownLieDuration: 0.8,
+  recoveryDuration: 0.6,
+  knockbackSpeed: 200,
+  blockDamageReduction: 0.7,
+};
+
 export const COLORS = {
   background: 0x0a0a1a,
   titleText: "#e8d5b5",
@@ -226,4 +278,18 @@ export const COLORS = {
   groundFill: 0x1a1a2e,
   groundLine: 0x2a2a4e,
   wallFill: 0x0f0f20,
+  enemyFill: 0x667788,
+  enemyOutline: 0x889aab,
+  enemyVisor: 0xdd3333,
+  enemyWindup: 0xff4444,
+  pickupGoldfish: 0xee8833,
+  pickupJuice: 0x8844bb,
+  pickupFruitSnack: 0xdd3344,
+  pickupApple: 0x55bb44,
+  pickupCheese: 0xeecc44,
+  moneyText: "#55cc55",
+  hubBg: 0x1a1a2e,
+  hubAccent: 0xc9944a,
+  hubPanel: 0x222244,
+  lockedChar: 0x333355,
 };

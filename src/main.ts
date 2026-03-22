@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { TitleScene } from "./scenes/TitleScene";
+import { HubScene } from "./scenes/HubScene";
 import { ArenaScene } from "./scenes/ArenaScene";
 import { GAME_WIDTH, GAME_HEIGHT, COLORS } from "./config/game";
 
@@ -16,7 +17,7 @@ const config: Phaser.Types.Core.GameConfig = {
   input: {
     gamepad: true,
   },
-  scene: [TitleScene, ArenaScene],
+  scene: [TitleScene, HubScene, ArenaScene],
 };
 
 new Phaser.Game(config);

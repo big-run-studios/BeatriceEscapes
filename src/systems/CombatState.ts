@@ -1,6 +1,10 @@
 import { ComboNode, ComboInput, COMBO_TREE } from "../config/game";
 
-export type PlayerState = "idle" | "walk" | "attacking" | "jump" | "airAttack" | "throwing" | "ultimate" | "hitstop";
+export type PlayerState =
+  | "idle" | "walk" | "attacking" | "jump" | "airAttack"
+  | "throwing" | "ultimate" | "blocking" | "dashing"
+  | "hitstun" | "knockdown" | "recovering" | "dead"
+  | "hitstop";
 
 export class CombatStateMachine {
   state: PlayerState = "idle";
@@ -12,33 +16,28 @@ export class CombatStateMachine {
   private preHitstopState: PlayerState = "idle";
   private preHitstopNode: ComboNode | null = null;
 
-  get isAttacking(): boolean {
-    return this.state === "attacking";
-  }
-
-  get inHitstop(): boolean {
-    return this.state === "hitstop";
-  }
-
-  get isJumping(): boolean {
-    return this.state === "jump";
-  }
-
-  get isAirAttacking(): boolean {
-    return this.state === "airAttack";
-  }
-
-  get isThrowing(): boolean {
-    return this.state === "throwing";
-  }
-
-  get isUltimate(): boolean {
-    return this.state === "ultimate";
-  }
+  get isAttacking(): boolean { return this.state === "attacking"; }
+  get inHitstop(): boolean { return this.state === "hitstop"; }
+  get isJumping(): boolean { return this.state === "jump"; }
+  get isAirAttacking(): boolean { return this.state === "airAttack"; }
+  get isThrowing(): boolean { return this.state === "throwing"; }
+  get isUltimate(): boolean { return this.state === "ultimate"; }
+  get isBlocking(): boolean { return this.state === "blocking"; }
+  get isDashing(): boolean { return this.state === "dashing"; }
+  get isHitstun(): boolean { return this.state === "hitstun"; }
+  get isKnockdown(): boolean { return this.state === "knockdown"; }
+  get isRecovering(): boolean { return this.state === "recovering"; }
+  get isDead(): boolean { return this.state === "dead"; }
 
   get isBusy(): boolean {
     return this.isAttacking || this.inHitstop || this.isJumping
-      || this.isAirAttacking || this.isThrowing || this.isUltimate;
+      || this.isAirAttacking || this.isThrowing || this.isUltimate
+      || this.isBlocking || this.isDashing
+      || this.isHitstun || this.isKnockdown || this.isRecovering || this.isDead;
+  }
+
+  get isVulnerable(): boolean {
+    return !this.isDashing && !this.isRecovering && !this.isDead;
   }
 
   update(dt: number): void {
@@ -68,10 +67,8 @@ export class CombatStateMachine {
 
   advanceCombo(): ComboNode | null {
     if (!this.bufferedInput || !this.currentNode) return null;
-
     const next = this.currentNode.children.find((c) => c.input === this.bufferedInput);
     this.bufferedInput = null;
-
     if (next) {
       this.enterNode(next);
       return next;
@@ -86,27 +83,16 @@ export class CombatStateMachine {
     this.hitstopRemaining = durationMs;
   }
 
-  enterJump(): void {
-    this.state = "jump";
-    this.stateTimer = 0;
-    this.currentNode = null;
-  }
-
-  enterAirAttack(): void {
-    this.state = "airAttack";
-    this.stateTimer = 0;
-    this.hasHitThisSwing = false;
-  }
-
-  enterThrowing(): void {
-    this.state = "throwing";
-    this.stateTimer = 0;
-  }
-
-  enterUltimate(): void {
-    this.state = "ultimate";
-    this.stateTimer = 0;
-  }
+  enterJump(): void { this.state = "jump"; this.stateTimer = 0; this.currentNode = null; }
+  enterAirAttack(): void { this.state = "airAttack"; this.stateTimer = 0; this.hasHitThisSwing = false; }
+  enterThrowing(): void { this.state = "throwing"; this.stateTimer = 0; }
+  enterUltimate(): void { this.state = "ultimate"; this.stateTimer = 0; }
+  enterBlocking(): void { this.state = "blocking"; this.stateTimer = 0; }
+  enterDashing(): void { this.state = "dashing"; this.stateTimer = 0; }
+  enterHitstun(): void { this.state = "hitstun"; this.stateTimer = 0; this.currentNode = null; this.bufferedInput = null; }
+  enterKnockdown(): void { this.state = "knockdown"; this.stateTimer = 0; }
+  enterRecovering(): void { this.state = "recovering"; this.stateTimer = 0; }
+  enterDead(): void { this.state = "dead"; this.stateTimer = 0; }
 
   toIdle(): void {
     this.state = "idle";
