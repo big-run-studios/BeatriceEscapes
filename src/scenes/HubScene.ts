@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT, COLORS } from "../config/game";
 import { InputManager, Action } from "../systems/InputManager";
+import { RunState, generateZone1Rooms } from "../systems/RunState";
 
 type HubPanel = "character" | "mode" | "waveConfig";
 
@@ -28,8 +29,12 @@ export class HubScene extends Phaser.Scene {
   private enemyCount = 3;
   private enemyLevel = 1;
   private selectedChar = "andrew-bea";
+  private selectedRow = 0;
 
   private panelObjects: Phaser.GameObjects.GameObject[] = [];
+  private panelTimers: Phaser.Time.TimerEvent[] = [];
+  private launching = false;
+  private inputGracePeriod = 0;
 
   constructor() {
     super({ key: "HubScene" });
@@ -39,12 +44,30 @@ export class HubScene extends Phaser.Scene {
     this.inputMgr = new InputManager(this);
     this.charIndex = 0;
     this.modeIndex = 0;
+    this.selectedRow = 0;
     this.panel = "character";
+    this.panelObjects = [];
+    this.panelTimers = [];
+    this.launching = false;
+    this.inputGracePeriod = 12;
+
     this.drawBackground();
     this.showPanel();
+    this.cameras.main.fadeIn(400, 0, 0, 0);
   }
 
   update(): void {
+    if (this.launching) {
+      this.inputMgr.postUpdate();
+      return;
+    }
+
+    if (this.inputGracePeriod > 0) {
+      this.inputGracePeriod--;
+      this.inputMgr.postUpdate();
+      return;
+    }
+
     switch (this.panel) {
       case "character": this.updateCharacterPanel(); break;
       case "mode": this.updateModePanel(); break;
@@ -87,7 +110,11 @@ export class HubScene extends Phaser.Scene {
   }
 
   private clearPanel(): void {
-    for (const obj of this.panelObjects) obj.destroy();
+    for (const t of this.panelTimers) t.destroy();
+    this.panelTimers = [];
+    for (const obj of this.panelObjects) {
+      if (obj && obj.active) obj.destroy();
+    }
     this.panelObjects = [];
   }
 
@@ -163,14 +190,15 @@ export class HubScene extends Phaser.Scene {
     hint.setOrigin(0.5); hint.setDepth(20);
     this.panelObjects.push(hint);
 
-    this.time.addEvent({
+    this.panelTimers.push(this.time.addEvent({
       delay: 100, loop: true,
       callback: () => {
+        if (!hint.active) return;
         const nav = this.inputMgr.lastDevice === "gamepad" ? "L-Stick/D-Pad" : "A/D";
         const confirm = this.inputMgr.getLabel(Action.CONFIRM);
         hint.setText(`${nav} to select  |  ${confirm} to confirm`);
       },
-    });
+    }));
   }
 
   private updateCharacterPanel(): void {
@@ -198,12 +226,18 @@ export class HubScene extends Phaser.Scene {
     title.setOrigin(0.5); title.setDepth(20);
     this.panelObjects.push(title);
 
-    const modes = ["Fight Dummies", "Fight Enemies"];
+    const modes = ["Start Run", "Fight Dummies", "Fight Enemies", "Story Mode"];
+    const modeDescs = [
+      "Run through Zone 1 — Earn boons from Merlin!",
+      "Train your combos on stationary targets",
+      "Fight waves of robot enemies!",
+      "Explore the narrative of the Bell family",
+    ];
     const cy = GAME_HEIGHT / 2;
 
     for (let i = 0; i < modes.length; i++) {
-      const y = cy - 30 + i * 80;
-      const bg = this.add.rectangle(GAME_WIDTH / 2, y, 360, 60, COLORS.hubPanel);
+      const y = cy - 90 + i * 60;
+      const bg = this.add.rectangle(GAME_WIDTH / 2, y, 360, 56, COLORS.hubPanel);
       bg.setStrokeStyle(3, i === this.modeIndex ? COLORS.hubAccent : 0x444466);
       bg.setDepth(15);
 
@@ -217,9 +251,7 @@ export class HubScene extends Phaser.Scene {
       this.panelObjects.push(bg, txt);
     }
 
-    const desc = this.add.text(GAME_WIDTH / 2, cy + 140, this.modeIndex === 0
-      ? "Train your combos on stationary targets"
-      : "Fight waves of robot enemies!", {
+    const desc = this.add.text(GAME_WIDTH / 2, cy + 160, modeDescs[this.modeIndex], {
       fontFamily: "monospace", fontSize: "11px", color: COLORS.subtitleText,
     });
     desc.setOrigin(0.5); desc.setDepth(16);
@@ -231,28 +263,38 @@ export class HubScene extends Phaser.Scene {
     hint.setOrigin(0.5); hint.setDepth(20);
     this.panelObjects.push(hint);
 
-    this.time.addEvent({
+    this.panelTimers.push(this.time.addEvent({
       delay: 100, loop: true,
       callback: () => {
-        const nav = this.inputMgr.lastDevice === "gamepad" ? "D-Pad" : "W/S";
+        if (!hint.active) return;
+        const nav = this.inputMgr.lastDevice === "gamepad" ? "L-Stick/D-Pad" : "W/S";
         const confirm = this.inputMgr.getLabel(Action.CONFIRM);
         const back = this.inputMgr.getLabel(Action.BACK);
         hint.setText(`${nav} to select  |  ${confirm} to confirm  |  ${back} to go back`);
       },
-    });
+    }));
   }
 
   private updateModePanel(): void {
-    if (this.inputMgr.justPressed(Action.UP) || this.inputMgr.justPressed(Action.DOWN)) {
-      this.modeIndex = this.modeIndex === 0 ? 1 : 0;
+    const modeCount = 4;
+    if (this.inputMgr.justPressed(Action.UP)) {
+      this.modeIndex = Math.max(0, this.modeIndex - 1);
+      this.showPanel();
+    }
+    if (this.inputMgr.justPressed(Action.DOWN)) {
+      this.modeIndex = Math.min(modeCount - 1, this.modeIndex + 1);
       this.showPanel();
     }
     if (this.inputMgr.justPressed(Action.CONFIRM)) {
       if (this.modeIndex === 0) {
+        this.launchRun();
+      } else if (this.modeIndex === 1) {
         this.launchArena("dummies");
-      } else {
+      } else if (this.modeIndex === 2) {
         this.panel = "waveConfig";
         this.showPanel();
+      } else {
+        this.launchNarrative();
       }
     }
     if (this.inputMgr.justPressed(Action.BACK)) {
@@ -304,9 +346,10 @@ export class HubScene extends Phaser.Scene {
 
     this.panelObjects.push(title, countLabel, levelLabel, countHint, levelHint, wavePreview, hint);
 
-    this.time.addEvent({
+    this.panelTimers.push(this.time.addEvent({
       delay: 100, loop: true,
       callback: () => {
+        if (!hint.active) return;
         const confirm = this.inputMgr.getLabel(Action.CONFIRM);
         const back = this.inputMgr.getLabel(Action.BACK);
         hint.setText(`${confirm} to start run  |  ${back} to go back`);
@@ -314,10 +357,8 @@ export class HubScene extends Phaser.Scene {
         levelLabel.setText(`Starting Level: ${this.enemyLevel}`);
         wavePreview.setText(this.getWavePreview());
       },
-    });
+    }));
   }
-
-  private selectedRow = 0;
 
   private updateWaveConfigPanel(): void {
     if (this.inputMgr.justPressed(Action.UP) || this.inputMgr.justPressed(Action.DOWN)) {
@@ -350,7 +391,45 @@ export class HubScene extends Phaser.Scene {
     return waves.join("  |  ");
   }
 
+  private launchRun(): void {
+    if (this.launching) return;
+    this.launching = true;
+
+    const runState = new RunState({
+      character: this.selectedChar,
+      roomPlan: generateZone1Rooms(),
+      wizardPool: ["Merlin"],
+    });
+    this.game.registry.set("runState", runState);
+
+    this.cameras.main.fadeOut(400, 0, 0, 0);
+    this.cameras.main.once("camerafadeoutcomplete", () => {
+      const firstRoom = runState.currentRoomDef;
+      if (firstRoom && firstRoom.type !== "blessing") {
+        this.scene.start("ArenaScene", {
+          mode: "run",
+          character: this.selectedChar,
+          startCount: firstRoom.enemyCount,
+          startLevel: firstRoom.enemyLevel,
+        });
+      } else {
+        this.scene.start("RoomMapScene");
+      }
+    });
+  }
+
+  private launchNarrative(): void {
+    if (this.launching) return;
+    this.launching = true;
+    this.cameras.main.fadeOut(400, 0, 0, 0);
+    this.cameras.main.once("camerafadeoutcomplete", () => {
+      this.scene.start("NarrativeScene");
+    });
+  }
+
   private launchArena(mode: "dummies" | "enemies"): void {
+    if (this.launching) return;
+    this.launching = true;
     this.cameras.main.fadeOut(400, 0, 0, 0);
     this.cameras.main.once("camerafadeoutcomplete", () => {
       this.scene.start("ArenaScene", {

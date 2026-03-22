@@ -1,19 +1,19 @@
 import Phaser from "phaser";
 import {
   GAME_WIDTH, GAME_HEIGHT, ARENA, COLORS, COMBAT, COMBO_TREE, ComboNode,
-  ULTIMATE, RUN, PICKUP,
+  ULTIMATE, RUN, PICKUP, ENEMY_AI,
 } from "../config/game";
 import { InputManager, Action } from "../systems/InputManager";
 import { HitFeel } from "../systems/HitFeel";
 import { RunState } from "../systems/RunState";
 import { Player } from "../entities/Player";
 import { TrainingDummy } from "../entities/TrainingDummy";
-import { Enemy } from "../entities/Enemy";
+import { Enemy, EnemyRole, PlayerIntent } from "../entities/Enemy";
 import { Projectile } from "../entities/Projectile";
 import { Pickup } from "../entities/Pickup";
 
 interface ArenaConfig {
-  mode: "dummies" | "enemies";
+  mode: "dummies" | "enemies" | "run";
   character: string;
   startCount: number;
   startLevel: number;
@@ -59,7 +59,18 @@ export class ArenaScene extends Phaser.Scene {
   create(): void {
     this.input_mgr = new InputManager(this);
     this.hitFeel = new HitFeel(this);
-    this.runState = new RunState();
+
+    if (this.config.mode === "run") {
+      const reg = this.game.registry.get("runState") as RunState | undefined;
+      if (reg) {
+        this.runState = reg;
+      } else {
+        this.runState = new RunState();
+      }
+    } else {
+      this.runState = new RunState();
+    }
+
     this.dummies = [];
     this.enemies = [];
     this.projectiles = [];
@@ -80,9 +91,14 @@ export class ArenaScene extends Phaser.Scene {
     const startY = ARENA.groundY + ARENA.groundHeight / 2;
     this.player = new Player(this, startX, startY, this.input_mgr, this.hitFeel);
     this.player.setDummyProvider(() => this.getAllTargets());
+    if (this.config.mode === "run") {
+      this.player.setBoonState(this.runState.boons);
+    }
 
     if (this.config.mode === "dummies") {
       this.spawnDummies();
+    } else if (this.config.mode === "run") {
+      this.spawnRunRoom();
     } else {
       this.startNextWave();
     }
@@ -99,20 +115,29 @@ export class ArenaScene extends Phaser.Scene {
       return;
     }
 
+    if (this.input_mgr.justPressed(Action.PAUSE) && !this.knockoutTriggered && !this.victoryTriggered) {
+      this.returnToHub();
+      return;
+    }
+
     const dt = delta / 1000;
     this.player.update(dt);
 
     this.processProjectileSpawns();
 
     for (const dummy of this.dummies) dummy.update(dt);
+    this.assignEnemyRoles();
+    const intent = this.buildPlayerIntent();
     for (const enemy of this.enemies) {
-      enemy.setPlayerRef({ x: this.player.x, y: this.player.y });
+      enemy.setPlayerIntent(intent);
+      enemy.setAllEnemies(this.enemies);
       enemy.update(dt);
     }
     for (const proj of this.projectiles) proj.update(dt);
     for (const pickup of this.pickups) pickup.update(dt);
 
     this.checkMeleeHits();
+    this.checkDashAttackHits();
     this.checkProjectileHits();
     this.checkAoeHits();
     this.checkUltimateBlast();
@@ -123,7 +148,11 @@ export class ArenaScene extends Phaser.Scene {
     this.updateComboDisplay();
     this.updateMoneyDisplay();
 
-    if (this.config.mode === "enemies") {
+    if (this.config.mode === "run") {
+      this.runState.boons.updateCooldowns(dt);
+      this.handleRunRoomLogic();
+      this.checkKnockout();
+    } else if (this.config.mode === "enemies") {
       this.handleWaveLogic(dt);
       this.checkKnockout();
     }
@@ -154,12 +183,231 @@ export class ArenaScene extends Phaser.Scene {
       const x = cx + 200 + Math.random() * 300;
       const y = cy + (Math.random() - 0.5) * 200;
       const enemy = new Enemy(this, x, y, level);
-      enemy.setPlayerRef({ x: this.player.x, y: this.player.y });
       this.enemies.push(enemy);
     }
   }
 
+  private spawnRunRoom(): void {
+    const room = this.runState.currentRoomDef;
+    if (!room) return;
+
+    let count = room.enemyCount;
+    let level = room.enemyLevel;
+
+    if (room.type === "miniboss") {
+      count = Math.max(count, 1);
+      level = Math.max(level, 3);
+    }
+
+    this.spawnEnemyWave(count, level);
+
+    if (room.type === "miniboss") {
+      for (const enemy of this.enemies) {
+        enemy.maxHp = Math.floor(enemy.maxHp * 3);
+        enemy.hp = enemy.maxHp;
+      }
+    }
+
+    this.waveActive = true;
+    this.showWaveAnnouncement(room.label);
+  }
+
+  // ── AI Coordination ──
+
+  private assignEnemyRoles(): void {
+    const living = this.enemies.filter((e) => e.isAlive && !e.isDead);
+    if (living.length === 0) return;
+
+    const px = this.player.x;
+    const py = this.player.y;
+
+    living.sort((a, b) => {
+      const da = Math.abs(a.x - px) + Math.abs(a.y - py);
+      const db = Math.abs(b.x - px) + Math.abs(b.y - py);
+      return da - db;
+    });
+
+    const slots = ENEMY_AI.engageSlots;
+
+    for (let i = 0; i < living.length; i++) {
+      const enemy = living[i];
+      let role: EnemyRole;
+      if (i < slots) {
+        role = "engage";
+      } else if (i < slots + 2) {
+        role = "flank";
+      } else {
+        role = "circle";
+      }
+
+      const dx = enemy.x - px;
+      const dist = Math.abs(dx);
+      if (role !== "engage" && dist < 100) {
+        role = "retreat";
+      }
+
+      enemy.role = role;
+    }
+  }
+
+  private buildPlayerIntent(): PlayerIntent {
+    const combat = this.player.combat;
+    return {
+      x: this.player.x,
+      y: this.player.y,
+      attacking: combat.isAttacking || combat.isDashAttacking,
+      facingRight: this.player.facingRight,
+      projectiles: this.projectiles
+        .filter((p) => p.alive)
+        .map((p) => ({ x: p.x, y: p.y, facingRight: p.facingRight })),
+    };
+  }
+
+  // ── Run room logic ──
+
+  private handleRunRoomLogic(): void {
+    if (this.knockoutTriggered || this.victoryTriggered) return;
+    if (!this.waveActive) return;
+
+    const allDead = this.enemies.every((e) => !e.isAlive);
+    if (!allDead) return;
+
+    this.waveActive = false;
+    this.handleEnemyDeathDrops();
+    this.cleanupDeadEnemies();
+
+    this.fireBoonEvent("onRoomClear", { x: this.player.x, y: this.player.y });
+
+    this.victoryTriggered = true;
+    this.sceneEnding = true;
+
+    this.time.delayedCall(800, () => {
+      this.runState.advanceRoom();
+
+      this.cameras.main.fadeOut(400, 0, 0, 0);
+      this.cameras.main.once("camerafadeoutcomplete", () => {
+        this.scene.start("RoomMapScene");
+      });
+    });
+  }
+
+  private fireBoonEvent(trigger: import("../data/boons").BoonTrigger, ctx: import("../data/boons").EventContext): void {
+    const actions = this.runState.boons.fireEvent(trigger, ctx);
+
+    for (const action of actions) {
+      switch (action.kind) {
+        case "chain_spark":
+          this.spawnChainSpark(ctx.targetX ?? ctx.x, ctx.targetY ?? ctx.y, action.damage, action.bounces, action.range, action.color);
+          break;
+        case "lightning_aoe":
+          this.spawnLightningAoe(ctx.targetX ?? ctx.x, ctx.targetY ?? ctx.y, action.damage, action.radius, action.color);
+          break;
+        case "damage_burst":
+          this.spawnDamageBurst(ctx.x, ctx.y, action.damage, action.radius, action.color);
+          break;
+        case "speed_burst":
+          this.runState.boons.applySpeedBurst(action.multiplier, action.duration);
+          break;
+        case "heal": {
+          const maxHp = this.runState.boons.getStat("maxHp", ULTIMATE.maxHp);
+          const healAmt = action.percent ? maxHp * (action.amount / 100) : action.amount;
+          this.player.hp = Math.min(maxHp, this.player.hp + healAmt);
+          break;
+        }
+      }
+    }
+  }
+
+  private spawnChainSpark(fromX: number, fromY: number, damage: number, bounces: number, range: number, color: number): void {
+    const living = this.enemies.filter((e) => e.isAlive);
+    let nearest: Enemy | null = null;
+    let nearestDist = range;
+
+    for (const e of living) {
+      const dx = Math.abs(e.x - fromX);
+      const dy = Math.abs(e.y - fromY);
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist && dist > 30) {
+        nearest = e;
+        nearestDist = dist;
+      }
+    }
+
+    if (!nearest) return;
+
+    const sparkProj = new Projectile(this, fromX, fromY, nearest.x > fromX, {
+      radius: 6, speed: 600, color, maxRange: range + 50,
+      damage, knockback: 60, hitstopMs: 30,
+      shakeIntensity: 2, shakeDuration: 40,
+    });
+    this.projectiles.push(sparkProj);
+
+    if (bounces > 1) {
+      this.time.delayedCall(200, () => {
+        if (nearest && !nearest.isAlive) return;
+        this.spawnChainSpark(nearest!.x, nearest!.y, Math.floor(damage * 0.8), bounces - 1, range, color);
+      });
+    }
+  }
+
+  private spawnLightningAoe(x: number, y: number, damage: number, radius: number, color: number): void {
+    const flash = this.add.circle(x, y - 30, radius, color, 0.5);
+    flash.setDepth(y + 100);
+    this.tweens.add({
+      targets: flash,
+      alpha: 0, scaleX: 1.5, scaleY: 1.5,
+      duration: 200,
+      onComplete: () => flash.destroy(),
+    });
+
+    for (const enemy of this.enemies) {
+      if (!enemy.isAlive) continue;
+      const dx = Math.abs(enemy.x - x);
+      const dy = Math.abs(enemy.y - y);
+      if (dx < radius && dy < radius * 0.6) {
+        const dir = x < enemy.x ? 1 : -1;
+        enemy.takeHit(damage, dir * 100, (Math.random() - 0.5) * 20);
+        this.hitFeel.impactFlash(enemy.x, enemy.y - enemy.height / 3);
+      }
+    }
+    this.hitFeel.shake(3, 60);
+  }
+
+  private spawnDamageBurst(x: number, y: number, damage: number, radius: number, color: number): void {
+    const flash = this.add.circle(x, y - 20, radius, color, 0.4);
+    flash.setDepth(y + 100);
+    this.tweens.add({
+      targets: flash,
+      alpha: 0, scaleX: 2, scaleY: 2,
+      duration: 250,
+      onComplete: () => flash.destroy(),
+    });
+
+    for (const enemy of this.enemies) {
+      if (!enemy.isAlive) continue;
+      const dx = Math.abs(enemy.x - x);
+      const dy = Math.abs(enemy.y - y);
+      if (dx < radius && dy < radius * 0.6) {
+        const dir = x < enemy.x ? 1 : -1;
+        enemy.takeHit(damage, dir * 80, (Math.random() - 0.5) * 20);
+        this.hitFeel.impactFlash(enemy.x, enemy.y - enemy.height / 3);
+      }
+    }
+    this.hitFeel.shake(2, 50);
+  }
+
   // ── Wave logic ──
+
+  private returnToHub(): void {
+    this.sceneEnding = true;
+    this.cameras.main.fadeOut(400, 0, 0, 0);
+    this.cameras.main.once("camerafadeoutcomplete", () => {
+      if (this.config.mode === "run") {
+        this.game.registry.remove("runState");
+      }
+      this.scene.start("HubScene");
+    });
+  }
 
   private startNextWave(): void {
     this.currentWave++;
@@ -251,6 +499,7 @@ export class ArenaScene extends Phaser.Scene {
     if (!this.player.isDead) return;
 
     this.knockoutTriggered = true;
+    this.sceneEnding = true;
 
     this.time.delayedCall(1200, () => {
       const beaText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20, "Again!", {
@@ -269,9 +518,11 @@ export class ArenaScene extends Phaser.Scene {
         duration: 400, ease: "Back.easeOut",
         onComplete: () => {
           this.time.delayedCall(1200, () => {
-            this.sceneEnding = true;
             this.cameras.main.fadeOut(600, 0, 0, 0);
             this.cameras.main.once("camerafadeoutcomplete", () => {
+              if (this.config.mode === "run") {
+                this.game.registry.remove("runState");
+              }
               this.scene.start("HubScene");
             });
           });
@@ -284,6 +535,7 @@ export class ArenaScene extends Phaser.Scene {
 
   private onVictory(): void {
     this.victoryTriggered = true;
+    this.sceneEnding = true;
 
     const ann = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 30, "RUN COMPLETE!", {
       fontFamily: "Georgia, serif", fontSize: "52px",
@@ -309,7 +561,6 @@ export class ArenaScene extends Phaser.Scene {
     });
 
     this.time.delayedCall(3000, () => {
-      this.sceneEnding = true;
       this.cameras.main.fadeOut(600, 0, 0, 0);
       this.cameras.main.once("camerafadeoutcomplete", () => {
         this.scene.start("HubScene");
@@ -356,12 +607,47 @@ export class ArenaScene extends Phaser.Scene {
       const dx = Math.abs(hitBox.x - enemy.x);
       const dy = Math.abs(this.player.y - enemy.y);
       if (dx < hitBox.range + enemy.width / 2 && dy < hitBox.depthRange + enemy.height / 4) {
+        const wasAlive = enemy.isAlive;
         const dir = this.player.facingRight ? 1 : -1;
         enemy.takeHit(hitBox.damage, dir * hitBox.knockback, (Math.random() - 0.5) * 30);
         this.hitFeel.impactFlash(enemy.x, enemy.y - enemy.height / 3);
         this.hitFeel.shake(hitBox.shakeIntensity, hitBox.shakeDuration);
+
+        if (this.config.mode === "run") {
+          const ctx = { x: this.player.x, y: this.player.y, targetX: enemy.x, targetY: enemy.y };
+          if (hitBox.isRush || hitBox.damage >= 20) {
+            this.fireBoonEvent("onHeavyHit", ctx);
+          } else {
+            this.fireBoonEvent("onMeleeHit", ctx);
+          }
+          if (wasAlive && !enemy.isAlive) {
+            this.fireBoonEvent("onKill", ctx);
+          }
+        }
+
         if (hitBox.isRush) { this.rushHitEnemies.add(enemy); }
         else { this.player.markHitConnected(); this.player.enterMeleeHitstop(hitBox.hitstopMs); break; }
+      }
+    }
+  }
+
+  private checkDashAttackHits(): void {
+    const hitBox = this.player.getDashAttackHitBox();
+    if (!hitBox) return;
+
+    const allTargets = [...this.dummies, ...this.enemies];
+    for (const t of allTargets) {
+      if (!t.isAlive) continue;
+      const dx = Math.abs(hitBox.x - t.x);
+      const dy = Math.abs(this.player.y - t.y);
+      if (dx < hitBox.range + t.width / 2 && dy < hitBox.depthRange + t.height / 4) {
+        const dir = this.player.facingRight ? 1 : -1;
+        t.takeHit(hitBox.damage, dir * hitBox.knockback, (Math.random() - 0.5) * 40);
+        this.hitFeel.impactFlash(t.x, t.y - t.height / 3);
+        this.hitFeel.shake(hitBox.shakeIntensity, hitBox.shakeDuration);
+        this.player.markHitConnected();
+        this.player.enterMeleeHitstop(hitBox.hitstopMs);
+        break;
       }
     }
   }
@@ -391,10 +677,20 @@ export class ArenaScene extends Phaser.Scene {
         const dx = Math.abs(proj.x - enemy.x);
         const dy = Math.abs(proj.worldY - enemy.y);
         if (dx < proj.radius + enemy.width / 2 && dy < COMBAT.meleeHitDepthRange + enemy.height / 4) {
+          const wasAlive = enemy.isAlive;
           const dir = proj.x < enemy.x ? 1 : -1;
           enemy.takeHit(proj.damage, dir * proj.knockback, (Math.random() - 0.5) * 20);
           this.hitFeel.projectileImpact(enemy.x, enemy.y - enemy.height / 3, proj.circle.fillColor);
           this.hitFeel.shake(proj.shakeIntensity, proj.shakeDuration);
+
+          if (this.config.mode === "run") {
+            const ctx = { x: proj.x, y: proj.worldY, targetX: enemy.x, targetY: enemy.y };
+            this.fireBoonEvent("onProjectileHit", ctx);
+            if (wasAlive && !enemy.isAlive) {
+              this.fireBoonEvent("onKill", ctx);
+            }
+          }
+
           proj.destroy();
           break;
         }
@@ -441,20 +737,34 @@ export class ArenaScene extends Phaser.Scene {
       const dy = Math.abs(hit.y - this.player.y);
 
       if (dx < hit.range + COMBAT.meleeHitRange && dy < hit.depthRange + 20) {
+        const wasBlocking = this.player.combat.isBlocking;
         const dir = enemy.x < this.player.x ? 1 : -1;
         this.player.takeHit(hit.damage, dir * hit.knockback, (Math.random() - 0.5) * 30);
         this.hitFeel.impactFlash(this.player.x, this.player.y - 20);
+
+        if (this.config.mode === "run") {
+          const ctx = { x: this.player.x, y: this.player.y, targetX: enemy.x, targetY: enemy.y };
+          if (wasBlocking) {
+            this.fireBoonEvent("onBlock", ctx);
+          } else {
+            this.fireBoonEvent("onTakeDamage", ctx);
+          }
+        }
       }
     }
   }
 
   private checkPickupCollection(): void {
+    const maxHp = this.config.mode === "run"
+      ? this.runState.boons.getStat("maxHp", ULTIMATE.maxHp)
+      : ULTIMATE.maxHp;
+
     for (const pickup of this.pickups) {
       if (!pickup.isAlive) continue;
       const dx = Math.abs(pickup.x - this.player.x);
       const dy = Math.abs(pickup.y - this.player.y);
       if (dx < PICKUP.collectRadius && dy < PICKUP.collectRadius) {
-        this.player.hp = Math.min(ULTIMATE.maxHp, this.player.hp + pickup.healAmount);
+        this.player.hp = Math.min(maxHp, this.player.hp + pickup.healAmount);
         pickup.collect(true);
         this.hitFeel.shake(1, 30);
       }
@@ -496,14 +806,18 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private updateMoneyDisplay(): void {
-    if (this.config.mode === "enemies") {
+    if (this.config.mode === "enemies" || this.config.mode === "run") {
       this.moneyDisplay.setText(this.runState.moneyDisplay);
     }
-    this.waveDisplay.setText(
-      this.config.mode === "enemies"
-        ? `Wave ${this.currentWave}/${RUN.waveCount}`
-        : "Training Mode"
-    );
+    if (this.config.mode === "run") {
+      this.waveDisplay.setText(this.runState.roomLabel);
+    } else {
+      this.waveDisplay.setText(
+        this.config.mode === "enemies"
+          ? `Wave ${this.currentWave}/${RUN.waveCount}`
+          : "Training Mode"
+      );
+    }
   }
 
   private findNodeById(id: string): ComboNode | null {
@@ -556,7 +870,7 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private addHUD(): void {
-    const version = this.add.text(GAME_WIDTH - 16, GAME_HEIGHT - 16, "B0.5.0", {
+    const version = this.add.text(GAME_WIDTH - 16, GAME_HEIGHT - 16, "B0.6.0", {
       fontFamily: "monospace", fontSize: "14px", color: COLORS.subtitleText,
     });
     version.setOrigin(1, 1); version.setScrollFactor(0); version.setDepth(20000);
@@ -633,7 +947,7 @@ export class ArenaScene extends Phaser.Scene {
     }
 
     const specialRow = this.add.text(startX, yRow3 - 2,
-      "Special:  Jump+Atk: Elbow Drop  |  Circle: Block/Throw  |  L1+R1: Ultimate  |  Dbl-tap: Dash", {
+      "Special:  Jump+Atk: Elbow Drop  |  Block/Throw: Circle  |  Ultimate: L1+R1  |  Dash: Dbl-tap  |  Dash+□: Shot  |  Dash+△: Punch", {
       ...labelStyle, fontSize: "10px",
     });
     specialRow.setScrollFactor(0); specialRow.setDepth(20000); specialRow.setAlpha(0.5);

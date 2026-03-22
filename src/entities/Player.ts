@@ -6,6 +6,7 @@ import {
 import { InputManager, Action } from "../systems/InputManager";
 import { CombatStateMachine } from "../systems/CombatState";
 import { HitFeel } from "../systems/HitFeel";
+import { BoonState } from "../systems/BoonState";
 import { ProjectileConfig } from "./Projectile";
 import { TrainingDummy } from "./TrainingDummy";
 
@@ -71,6 +72,7 @@ export class Player {
   private throwTarget: TrainingDummy | null = null;
   private throwPhase: "grab" | "throw" = "grab";
   private getDummies: (() => TrainingDummy[]) | null = null;
+  private boonState: BoonState | null = null;
 
   hp = ULTIMATE.maxHp;
   mp = ULTIMATE.maxMp;
@@ -85,11 +87,15 @@ export class Player {
   private lastTapLeft = 0;
   private dashCooldownTimer = 0;
   private dashDir = 1;
+  private prevMoveX = 0;
+  private dashAttackType: "light" | "heavy" = "light";
+  private dashAttackHitFired = false;
 
   // Knockdown / hitstun
   private hitKnockbackVx = 0;
   private hitKnockbackVy = 0;
   private iFrameFlashTimer = 0;
+  private iFrameTimer = 0;
   isDead = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number, inputMgr: InputManager, hitFeel: HitFeel) {
@@ -141,6 +147,7 @@ export class Player {
     if (this.combat.isThrowing) return this.throwPhase === "grab" ? "Grab!" : "Throw!";
     if (this.combat.isUltimate) return "BEA GOES SUPER";
     if (this.combat.isBlocking) return "Blocking";
+    if (this.combat.isDashAttacking) return this.dashAttackType === "light" ? "Dash Shot!" : "Dash Punch!";
     if (this.combat.isDashing) return "Dash!";
     if (this.combat.isHitstun) return "HIT!";
     if (this.combat.isKnockdown) return "DOWN!";
@@ -156,6 +163,11 @@ export class Player {
   }
 
   setDummyProvider(fn: () => TrainingDummy[]): void { this.getDummies = fn; }
+  setBoonState(bs: BoonState): void { this.boonState = bs; }
+
+  private stat(name: string, base: number): number {
+    return this.boonState ? this.boonState.getStat(name, base) : base;
+  }
 
   drainProjectileRequests(): ProjectileSpawnRequest[] {
     const reqs = this.pendingProjectiles;
@@ -170,8 +182,8 @@ export class Player {
   }
 
   resetForRun(): void {
-    this.hp = ULTIMATE.maxHp;
-    this.mp = ULTIMATE.maxMp;
+    this.hp = this.stat("maxHp", ULTIMATE.maxHp);
+    this.mp = this.stat("maxMp", ULTIMATE.maxMp);
     this.isDead = false;
     this.combat.toIdle();
     this.jumpOffset = 0;
@@ -179,6 +191,8 @@ export class Player {
     this.rushTimer = 0;
     this.hitKnockbackVx = 0;
     this.hitKnockbackVy = 0;
+    this.iFrameTimer = 0;
+    this.iFrameFlashTimer = 0;
     this.container.setAlpha(1);
     this.container.scaleY = 1;
     this.resetPose();
@@ -190,6 +204,18 @@ export class Player {
     this.combat.update(dt);
     this.regenMp(dt);
     if (this.dashCooldownTimer > 0) this.dashCooldownTimer -= dt;
+
+    if (this.iFrameTimer > 0) {
+      this.iFrameTimer -= dt;
+      this.iFrameFlashTimer += dt;
+      const flash = Math.sin(this.iFrameFlashTimer * 25) > 0;
+      this.container.setAlpha(flash ? 1 : 0.3);
+      if (this.iFrameTimer <= 0) {
+        this.iFrameTimer = 0;
+        this.iFrameFlashTimer = 0;
+        this.container.setAlpha(1);
+      }
+    }
 
     if (this.combat.inHitstop) {
       this.applyHitstopVisual();
@@ -241,6 +267,15 @@ export class Player {
 
     if (this.combat.isDashing) {
       this.handleDash(dt);
+      this.applyVisualState();
+      this.updateResourceBars();
+      this.clampToBounds();
+      this.container.setDepth(this.container.y);
+      return;
+    }
+
+    if (this.combat.isDashAttacking) {
+      this.handleDashAttack(dt);
       this.applyVisualState();
       this.updateResourceBars();
       this.clampToBounds();
@@ -333,8 +368,17 @@ export class Player {
   checkDoubleTapDash(move: { x: number; y: number }): void {
     if (this.combat.isBusy || this.dashCooldownTimer > 0) return;
 
+    const threshold = 0.7;
     const now = this.scene.time.now / 1000;
-    if (this.inputMgr.justPressed(Action.RIGHT) || (move.x > 0.7 && this.lastTapRight < now - 0.02)) {
+
+    const rightFlick = (move.x > threshold && this.prevMoveX <= threshold)
+      || this.inputMgr.justPressed(Action.RIGHT);
+    const leftFlick = (move.x < -threshold && this.prevMoveX >= -threshold)
+      || this.inputMgr.justPressed(Action.LEFT);
+
+    this.prevMoveX = move.x;
+
+    if (rightFlick) {
       if (now - this.lastTapRight < DASH.doubleTapWindow && this.lastTapRight > 0) {
         this.startDash(1);
         this.lastTapRight = 0;
@@ -342,7 +386,7 @@ export class Player {
       }
       this.lastTapRight = now;
     }
-    if (this.inputMgr.justPressed(Action.LEFT) || (move.x < -0.7 && this.lastTapLeft < now - 0.02)) {
+    if (leftFlick) {
       if (now - this.lastTapLeft < DASH.doubleTapWindow && this.lastTapLeft > 0) {
         this.startDash(-1);
         this.lastTapLeft = 0;
@@ -366,9 +410,85 @@ export class Player {
       this.spawnAfterimage();
     }
 
+    if (this.inputMgr.justPressed(Action.ATTACK)) {
+      this.startDashAttack("light");
+      return;
+    }
+    if (this.inputMgr.justPressed(Action.HEAVY)) {
+      this.startDashAttack("heavy");
+      return;
+    }
+
     if (this.combat.stateTimer >= DASH.duration) {
       this.combat.toIdle();
     }
+  }
+
+  private startDashAttack(type: "light" | "heavy"): void {
+    this.dashAttackType = type;
+    this.dashAttackHitFired = false;
+    this.combat.enterDashAttack();
+
+    if (type === "light") {
+      this.hitFeel.swingArc(this.beaWorldX, this.beaWorldY, this.facingRight, false);
+    } else {
+      this.hitFeel.swingArc(this.container.x, this.container.y, this.facingRight, true);
+    }
+  }
+
+  private handleDashAttack(dt: number): void {
+    const momentum = Math.max(0, 1 - this.combat.stateTimer / DASH.attackDuration);
+    this.container.x += this.dashDir * DASH.speed * 0.5 * momentum * dt;
+
+    const hitFrame = this.dashAttackType === "light" ? 0.08 : 0.12;
+    if (this.combat.stateTimer >= hitFrame && !this.dashAttackHitFired) {
+      this.dashAttackHitFired = true;
+      if (this.dashAttackType === "light") {
+        if (this.mp >= DASH.lightMpCost) {
+          this.mp -= DASH.lightMpCost;
+          this.pendingProjectiles.push({
+            x: this.beaWorldX + (this.facingRight ? 25 : -25),
+            y: this.beaWorldY,
+            facingRight: this.facingRight,
+            config: {
+              radius: 12, speed: 600, color: 0x88ccff, maxRange: 350,
+              damage: DASH.lightDamage, knockback: DASH.lightKnockback,
+              hitstopMs: DASH.lightHitstopMs,
+              shakeIntensity: DASH.lightShakeIntensity, shakeDuration: DASH.lightShakeDuration,
+            },
+          });
+        } else {
+          this.onDryFire();
+        }
+      }
+    }
+
+    if (this.combat.stateTimer >= DASH.attackDuration) {
+      this.combat.toIdle();
+    }
+  }
+
+  getDashAttackHitBox(): MeleeHitBox | null {
+    if (!this.combat.isDashAttacking) return null;
+    if (this.dashAttackType !== "heavy") return null;
+    if (this.combat.hasHitThisSwing) return null;
+
+    const hitFrame = 0.12;
+    if (this.combat.stateTimer < hitFrame) return null;
+
+    const dir = this.facingRight ? 1 : -1;
+    return {
+      x: this.container.x + dir * DASH.attackHitRange,
+      y: this.container.y,
+      range: DASH.attackHitRange,
+      depthRange: DASH.attackDepthRange,
+      damage: DASH.heavyDamage,
+      knockback: DASH.heavyKnockback,
+      hitstopMs: DASH.heavyHitstopMs,
+      shakeIntensity: DASH.heavyShakeIntensity,
+      shakeDuration: DASH.heavyShakeDuration,
+      isRush: false,
+    };
   }
 
   private spawnAfterimage(): void {
@@ -386,8 +506,8 @@ export class Player {
 
   // ── Player takes damage ──
 
-  takeHit(damage: number, knockbackX: number, knockbackY: number): void {
-    if (!this.combat.isVulnerable || this.isDead) return;
+  takeHit(damage: number, knockbackX: number, _knockbackY: number): void {
+    if (!this.combat.isVulnerable || this.isDead || this.iFrameTimer > 0) return;
 
     let actualDamage = damage;
     if (this.combat.isBlocking) {
@@ -403,15 +523,13 @@ export class Player {
       return;
     }
 
-    this.hitKnockbackVx = knockbackX;
-    this.hitKnockbackVy = knockbackY;
+    const dir = knockbackX >= 0 ? 1 : -1;
+    this.hitKnockbackVx = dir * PLAYER_HIT.hitKnockbackStep;
+    this.hitKnockbackVy = _knockbackY * 0.3;
     this.hitFeel.shake(3, 60);
 
-    if (this.combat.isHitstun) {
-      this.combat.enterKnockdown();
-    } else {
-      this.combat.enterHitstun();
-    }
+    this.combat.enterHitstun();
+    this.iFrameTimer = PLAYER_HIT.iFrameDuration;
   }
 
   private handleHitstun(dt: number): void {
@@ -699,16 +817,18 @@ export class Player {
   // ── MP ──
 
   private regenMp(dt: number): void {
-    if (this.mp < ULTIMATE.maxMp) {
-      this.mp = Math.min(ULTIMATE.maxMp, this.mp + ULTIMATE.mpRegen * dt);
+    const maxMp = this.stat("maxMp", ULTIMATE.maxMp);
+    const mpRegen = this.stat("mpRegen", ULTIMATE.mpRegen);
+    if (this.mp < maxMp) {
+      this.mp = Math.min(maxMp, this.mp + mpRegen * dt);
     }
   }
 
   private updateResourceBars(): void {
-    const hpRatio = this.hp / ULTIMATE.maxHp;
+    const hpRatio = this.hp / this.stat("maxHp", ULTIMATE.maxHp);
     this.hpBarFill.scaleX = hpRatio;
     this.hpBarFill.x = -(HP_BAR_W * (1 - hpRatio)) / 2;
-    const mpRatio = this.mp / ULTIMATE.maxMp;
+    const mpRatio = this.mp / this.stat("maxMp", ULTIMATE.maxMp);
     this.mpBarFill.scaleX = mpRatio;
     this.mpBarFill.x = -(MP_BAR_W * (1 - mpRatio)) / 2;
   }
@@ -777,14 +897,58 @@ export class Player {
       this.rushSpeed = node.rush.speed;
       this.hitFeel.shake(node.shakeIntensity, node.shakeDuration);
     }
+    this.applyAttackStep(node);
+  }
+
+  private applyAttackStep(node: ComboNode): void {
+    if (node.moveType === "rush") return;
+    const dir = this.facingRight ? 1 : -1;
+    if (node.input === "H") {
+      this.scene.tweens.add({
+        targets: this.container,
+        x: this.container.x + dir * COMBAT.heavyStepDistance,
+        duration: COMBAT.heavyStepDuration,
+        ease: "Power2",
+      });
+    } else {
+      this.scene.tweens.add({
+        targets: this.container,
+        x: this.container.x - dir * COMBAT.lightStepBackDistance,
+        duration: COMBAT.lightStepBackDuration,
+        ease: "Sine.easeOut",
+      });
+    }
   }
 
   private onHitFrame(node: ComboNode): void {
-    if (node.moveType === "projectile" && node.projectile) this.spawnProjectile(node);
-    else if (node.moveType === "burst" && node.projectile) this.spawnBurst(node);
-    else if (node.moveType === "toss") this.startBeaToss(node);
+    const cost = node.mpCost ?? 0;
+    const canAfford = this.mp >= cost;
+
+    if (node.moveType === "projectile" && node.projectile) {
+      if (canAfford) { this.mp -= cost; this.spawnProjectile(node); }
+      else { this.onDryFire(); }
+    } else if (node.moveType === "burst" && node.projectile) {
+      if (canAfford) { this.mp -= cost; this.spawnBurst(node); }
+      else { this.onDryFire(); }
+    } else if (node.moveType === "toss") {
+      this.startBeaToss(node);
+    }
+
     if (node.moveType !== "melee") this.hitFeel.shake(node.shakeIntensity, node.shakeDuration);
     if (node.moveType === "rush") this.combat.enterHitstop(node.hitstopMs);
+  }
+
+  private onDryFire(): void {
+    this.hitFeel.shake(1, 20);
+    const puff = this.scene.add.circle(
+      this.beaWorldX + (this.facingRight ? 15 : -15), this.beaWorldY,
+      6, 0x888888, 0.5,
+    );
+    puff.setDepth(this.container.y + 2);
+    this.scene.tweens.add({
+      targets: puff, alpha: 0, scaleX: 2, scaleY: 2,
+      duration: 200, onComplete: () => puff.destroy(),
+    });
   }
 
   private spawnProjectile(node: ComboNode): void {
@@ -849,19 +1013,24 @@ export class Player {
     this.checkDoubleTapDash(move);
     if (this.combat.isDashing) return;
 
+    const baseSpd = this.stat("speed", PLAYER.speed);
+    const speedMul = this.boonState ? this.boonState.speedBurstMultiplier : 1;
+    const spd = baseSpd * speedMul;
+    const depthSpd = PLAYER.depthSpeed * (spd / PLAYER.speed) * speedMul;
+
     if (this.combat.isBlocking) {
       const bm = COMBAT.blockSpeedMultiplier;
-      this.container.x += move.x * PLAYER.speed * bm * dt;
-      this.container.y += move.y * PLAYER.depthSpeed * bm * dt;
+      this.container.x += move.x * spd * bm * dt;
+      this.container.y += move.y * depthSpd * bm * dt;
     } else if (this.combat.isJumping || this.combat.isAirAttacking) {
-      this.container.x += move.x * PLAYER.speed * 0.6 * dt;
-      this.container.y += move.y * PLAYER.depthSpeed * 0.6 * dt;
+      this.container.x += move.x * spd * 0.6 * dt;
+      this.container.y += move.y * depthSpd * 0.6 * dt;
     } else if (this.combat.isRecovering) {
-      this.container.x += move.x * PLAYER.speed * 0.5 * dt;
-      this.container.y += move.y * PLAYER.depthSpeed * 0.5 * dt;
+      this.container.x += move.x * spd * 0.5 * dt;
+      this.container.y += move.y * depthSpd * 0.5 * dt;
     } else {
-      this.container.x += move.x * PLAYER.speed * dt;
-      this.container.y += move.y * PLAYER.depthSpeed * dt;
+      this.container.x += move.x * spd * dt;
+      this.container.y += move.y * depthSpd * dt;
       if (Math.abs(move.x) > 0.1 || Math.abs(move.y) > 0.1) this.combat.toWalk();
       else if (this.combat.state === "walk") this.combat.toIdle();
     }
@@ -891,6 +1060,7 @@ export class Player {
     if (s.isAirAttacking) this.applyAirAttackPose();
     else if (s.isThrowing) this.applyThrowPose();
     else if (s.isBlocking) this.applyBlockPose();
+    else if (s.isDashAttacking) this.applyDashAttackPose();
     else if (s.isDashing) this.applyDashPose();
     else if (s.isAttacking && s.currentNode) this.applyAttackPose(s.stateTimer / s.currentNode.duration, s.currentNode.visual);
     else this.resetPose();
@@ -936,6 +1106,24 @@ export class Player {
   private applyDashPose(): void {
     this.body.scaleX = 1.3; this.body.scaleY = 0.85;
     this.head.x = this.dashDir * 6;
+  }
+
+  private applyDashAttackPose(): void {
+    const p = Math.min(this.combat.stateTimer / DASH.attackDuration, 1);
+    const swing = Math.sin(p * Math.PI);
+    if (this.dashAttackType === "heavy") {
+      this.body.scaleX = 1.2 + swing * 0.15;
+      this.body.scaleY = 1 - swing * 0.15;
+      this.head.x = this.dashDir * swing * 12;
+      this.head.y = this.headBaseY - swing * 4;
+    } else {
+      const beaLean = swing * 18;
+      this.beaBody.x = beaLean * 0.7;
+      this.beaHead.x = beaLean * 0.9;
+      this.beaBody.rotation = swing * 0.25;
+      this.beaHead.rotation = swing * 0.2;
+      this.body.scaleX = 1.1;
+    }
   }
 
   private applyAttackPose(progress: number, visual: VisualPose): void {

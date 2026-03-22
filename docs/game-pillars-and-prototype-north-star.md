@@ -1,6 +1,6 @@
 # Bea Escapes — Game Pillars & Prototype North Star
 
-> **Version:** D1.0 | **Last Updated:** 2026-03-21
+> **Version:** D1.1 | **Last Updated:** 2026-03-22
 
 > **One-Line Vision**
 > A family on the run discovers they're more magical — and more powerful together — than they ever knew, in a roguelite beat 'em up that plays like the best modern arcade brawler and feels like your favorite animated movie.
