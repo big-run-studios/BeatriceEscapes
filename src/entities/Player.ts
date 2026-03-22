@@ -511,7 +511,9 @@ export class Player {
 
     let actualDamage = damage;
     if (this.combat.isBlocking) {
-      actualDamage = Math.floor(damage * (1 - PLAYER_HIT.blockDamageReduction));
+      const baseReduction = PLAYER_HIT.blockDamageReduction;
+      const totalReduction = Math.min(0.95, this.stat("blockReduction", baseReduction));
+      actualDamage = Math.floor(damage * (1 - totalReduction));
       this.hitFeel.shake(2, 50);
       this.combat.toIdle();
     }

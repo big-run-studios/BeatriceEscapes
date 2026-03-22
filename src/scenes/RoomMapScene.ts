@@ -153,7 +153,9 @@ export class RoomMapScene extends Phaser.Scene {
       const pip = this.add.circle(x, barY + 5, 5, boon.color, 0.9);
       pip.setDepth(10);
 
-      const name = this.add.text(x + 10, barY, boon.name, {
+      const stacks = this.runState.boons.getStackCount(boon.id);
+      const suffix = boon.stackable && stacks > 1 ? ` x${stacks}` : "";
+      const name = this.add.text(x + 10, barY, boon.name + suffix, {
         fontFamily: "monospace", fontSize: "9px", color: "#aaaaaa",
       });
       name.setDepth(10);
@@ -299,13 +301,19 @@ export class RoomMapScene extends Phaser.Scene {
     const cardW = 260;
     const cardH = 280;
     const rarityColor = RARITY_COLORS[boon.rarity];
+    const stacks = boon.stackable ? this.runState.boons.getStackCount(boon.id) : 0;
 
     const bg = this.add.rectangle(x, y, cardW, cardH, selected ? 0x1a1a3a : 0x111128, 0.95);
     bg.setStrokeStyle(selected ? 3 : 2, selected ? rarityColor : 0x444466);
     bg.setDepth(12);
     this.uiObjects.push(bg);
 
-    const rarityLabel = this.add.text(x, y - cardH / 2 + 18, boon.rarity.toUpperCase(), {
+    let topLabel = boon.rarity.toUpperCase();
+    if (boon.stackable && stacks > 0) {
+      topLabel = `STACK x${stacks} \u2192 x${stacks + 1}`;
+    }
+
+    const rarityLabel = this.add.text(x, y - cardH / 2 + 18, topLabel, {
       fontFamily: "monospace", fontSize: "10px",
       color: `#${rarityColor.toString(16).padStart(6, "0")}`,
       fontStyle: "bold",
@@ -314,17 +322,22 @@ export class RoomMapScene extends Phaser.Scene {
     rarityLabel.setDepth(13);
     this.uiObjects.push(rarityLabel);
 
+    const iconChar = boon.stackable ? "\u2B06" : "\u26A1";
     const icon = this.add.circle(x, y - cardH / 2 + 60, 22, boon.color, 0.9);
     icon.setStrokeStyle(2, 0xffffff, 0.3);
     icon.setDepth(13);
     this.uiObjects.push(icon);
 
-    const spark = this.add.text(x, y - cardH / 2 + 60, "\u26A1", { fontSize: "20px" });
+    const spark = this.add.text(x, y - cardH / 2 + 60, iconChar, { fontSize: "20px" });
     spark.setOrigin(0.5);
     spark.setDepth(14);
     this.uiObjects.push(spark);
 
-    const nameText = this.add.text(x, y - cardH / 2 + 100, boon.name, {
+    const displayName = boon.stackable && stacks > 0
+      ? `${boon.name} x${stacks + 1}`
+      : boon.name;
+
+    const nameText = this.add.text(x, y - cardH / 2 + 100, displayName, {
       fontFamily: "Georgia, serif", fontSize: "18px",
       color: selected ? COLORS.accent : COLORS.titleText,
       fontStyle: "bold",
@@ -333,7 +346,15 @@ export class RoomMapScene extends Phaser.Scene {
     nameText.setDepth(13);
     this.uiObjects.push(nameText);
 
-    const descText = this.add.text(x, y - cardH / 2 + 130, boon.description, {
+    let descContent = boon.description;
+    if (boon.stackable) {
+      const nextBonus = this.runState.boons.getNextStackBonus(boon);
+      if (nextBonus) {
+        descContent += `\n\nNext stack: ${nextBonus}`;
+      }
+    }
+
+    const descText = this.add.text(x, y - cardH / 2 + 130, descContent, {
       fontFamily: "Georgia, serif", fontSize: "13px",
       color: "#bbbbcc",
       wordWrap: { width: cardW - 30 },

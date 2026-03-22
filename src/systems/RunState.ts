@@ -65,9 +65,12 @@ export class RunState {
 export function generateZone1Rooms(): RoomDef[] {
   return [
     { type: "combat",   enemyCount: 2, enemyLevel: 1, label: "Street Fight" },
-    { type: "blessing", enemyCount: 0, enemyLevel: 0, label: "Wizard Blessing" },
     { type: "combat",   enemyCount: 3, enemyLevel: 1, label: "Backyard Brawl" },
-    { type: "combat",   enemyCount: 3, enemyLevel: 2, label: "Playground Clash" },
-    { type: "miniboss", enemyCount: 1, enemyLevel: 3, label: "Neighborhood Watch" },
+    { type: "blessing", enemyCount: 0, enemyLevel: 0, label: "Wizard Blessing" },
+    { type: "combat",   enemyCount: 3, enemyLevel: 2, label: "Dog Park Ambush" },
+    { type: "combat",   enemyCount: 4, enemyLevel: 2, label: "Playground Clash" },
+    { type: "combat",   enemyCount: 4, enemyLevel: 3, label: "Cul-de-sac Showdown" },
+    { type: "combat",   enemyCount: 5, enemyLevel: 3, label: "Block Party Brawl" },
+    { type: "miniboss", enemyCount: 1, enemyLevel: 4, label: "Neighborhood Watch Captain" },
   ];
 }

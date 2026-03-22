@@ -3,14 +3,32 @@ import {
   EventContext, ALL_BOON_POOLS, RARITY_WEIGHTS,
 } from "../data/boons";
 
+function diminishingFactor(stacks: number): number {
+  if (stacks <= 1) return 1;
+  return 1 / (1 + 0.5 * (stacks - 1));
+}
+
 export class BoonState {
   readonly activeBoons: BoonDef[] = [];
+  private stackCounts = new Map<string, number>();
   private cooldowns = new Map<string, number>();
   private _speedBurst = 0;
   private _speedMultiplier = 1;
 
   addBoon(boon: BoonDef): void {
-    this.activeBoons.push(boon);
+    if (boon.stackable) {
+      const current = this.stackCounts.get(boon.id) ?? 0;
+      this.stackCounts.set(boon.id, current + 1);
+      if (current === 0) {
+        this.activeBoons.push(boon);
+      }
+    } else {
+      this.activeBoons.push(boon);
+    }
+  }
+
+  getStackCount(boonId: string): number {
+    return this.stackCounts.get(boonId) ?? 0;
   }
 
   get speedBurstMultiplier(): number {
@@ -25,12 +43,47 @@ export class BoonState {
       for (const effect of boon.effects) {
         if (effect.type !== "stat") continue;
         if (effect.stat !== stat) continue;
-        if (effect.mode === "add") additive += effect.value;
-        else multiplicative *= effect.value;
+
+        if (boon.stackable) {
+          const stacks = this.stackCounts.get(boon.id) ?? 1;
+          let totalBonus = 0;
+          for (let s = 1; s <= stacks; s++) {
+            totalBonus += diminishingFactor(s);
+          }
+
+          if (effect.mode === "add") {
+            additive += effect.value * totalBonus;
+          } else {
+            const perStackBonus = effect.value - 1;
+            multiplicative *= 1 + perStackBonus * totalBonus;
+          }
+        } else {
+          if (effect.mode === "add") additive += effect.value;
+          else multiplicative *= effect.value;
+        }
       }
     }
 
     return (baseValue + additive) * multiplicative;
+  }
+
+  getNextStackBonus(boon: BoonDef): string {
+    if (!boon.stackable) return "";
+    const stacks = this.stackCounts.get(boon.id) ?? 0;
+    const nextFactor = diminishingFactor(stacks + 1);
+
+    const parts: string[] = [];
+    for (const effect of boon.effects) {
+      if (effect.type !== "stat") continue;
+      if (effect.mode === "add") {
+        const val = effect.value * nextFactor;
+        parts.push(`+${val.toFixed(1)} ${effect.stat}`);
+      } else {
+        const pct = (effect.value - 1) * nextFactor * 100;
+        parts.push(`+${pct.toFixed(1)}% ${effect.stat}`);
+      }
+    }
+    return parts.join(", ");
   }
 
   fireEvent(trigger: BoonTrigger, _ctx: EventContext): BoonAction[] {
@@ -84,7 +137,7 @@ export class BoonState {
     }
 
     const owned = new Set(this.activeBoons.map((b) => b.id));
-    const available = pool.filter((b) => !owned.has(b.id));
+    const available = pool.filter((b) => b.stackable || !owned.has(b.id));
     if (available.length === 0) return [];
 
     return weightedSample(available, Math.min(count, available.length));

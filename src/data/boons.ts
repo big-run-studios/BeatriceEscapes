@@ -33,6 +33,7 @@ export interface BoonDef {
   rarity: BoonRarity;
   effects: BoonEffect[];
   color: number;
+  stackable?: boolean;
 }
 
 export interface EventContext {
@@ -180,8 +181,59 @@ export const MERLIN_BOONS: BoonDef[] = [
   },
 ];
 
+// ════════════════════════════════════════════════════════════════
+//  MERLIN'S BASE STAT BOONS — Stackable with diminishing returns
+// ════════════════════════════════════════════════════════════════
+
+const STAT_COLOR = 0x99bbdd;
+
+export const MERLIN_BASE_BOONS: BoonDef[] = [
+  {
+    id: "arcane-might",
+    name: "Arcane Might",
+    description: "Light and heavy attacks deal more damage.",
+    wizard: "Merlin", rarity: "common", color: STAT_COLOR, stackable: true,
+    effects: [{ type: "stat", stat: "damage", mode: "multiply", value: 1.20 }],
+  },
+  {
+    id: "arcane-swiftness",
+    name: "Arcane Swiftness",
+    description: "Move faster across the battlefield.",
+    wizard: "Merlin", rarity: "common", color: STAT_COLOR, stackable: true,
+    effects: [{ type: "stat", stat: "speed", mode: "multiply", value: 1.15 }],
+  },
+  {
+    id: "arcane-fortitude",
+    name: "Arcane Fortitude",
+    description: "Increases maximum health.",
+    wizard: "Merlin", rarity: "common", color: STAT_COLOR, stackable: true,
+    effects: [{ type: "stat", stat: "maxHp", mode: "add", value: 25 }],
+  },
+  {
+    id: "arcane-focus",
+    name: "Arcane Focus",
+    description: "Increases maximum magic.",
+    wizard: "Merlin", rarity: "common", color: STAT_COLOR, stackable: true,
+    effects: [{ type: "stat", stat: "maxMp", mode: "add", value: 20 }],
+  },
+  {
+    id: "arcane-flow",
+    name: "Arcane Flow",
+    description: "Magic regenerates faster.",
+    wizard: "Merlin", rarity: "common", color: STAT_COLOR, stackable: true,
+    effects: [{ type: "stat", stat: "mpRegen", mode: "add", value: 3 }],
+  },
+  {
+    id: "arcane-guard",
+    name: "Arcane Guard",
+    description: "Block absorbs more damage.",
+    wizard: "Merlin", rarity: "common", color: STAT_COLOR, stackable: true,
+    effects: [{ type: "stat", stat: "blockReduction", mode: "add", value: 0.08 }],
+  },
+];
+
 export const ALL_BOON_POOLS: Record<string, BoonDef[]> = {
-  Merlin: MERLIN_BOONS,
+  Merlin: [...MERLIN_BOONS, ...MERLIN_BASE_BOONS],
 };
 
 export const RARITY_WEIGHTS: Record<BoonRarity, number> = {
