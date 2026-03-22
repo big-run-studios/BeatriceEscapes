@@ -1,6 +1,6 @@
 import { ComboNode, ComboInput, COMBO_TREE } from "../config/game";
 
-export type PlayerState = "idle" | "walk" | "attacking" | "jump" | "hitstop";
+export type PlayerState = "idle" | "walk" | "attacking" | "jump" | "airAttack" | "throwing" | "ultimate" | "hitstop";
 
 export class CombatStateMachine {
   state: PlayerState = "idle";
@@ -24,8 +24,21 @@ export class CombatStateMachine {
     return this.state === "jump";
   }
 
+  get isAirAttacking(): boolean {
+    return this.state === "airAttack";
+  }
+
+  get isThrowing(): boolean {
+    return this.state === "throwing";
+  }
+
+  get isUltimate(): boolean {
+    return this.state === "ultimate";
+  }
+
   get isBusy(): boolean {
-    return this.isAttacking || this.inHitstop || this.isJumping;
+    return this.isAttacking || this.inHitstop || this.isJumping
+      || this.isAirAttacking || this.isThrowing || this.isUltimate;
   }
 
   update(dt: number): void {
@@ -46,7 +59,6 @@ export class CombatStateMachine {
     }
   }
 
-  /** Start a new combo from idle with the given input. Returns the node entered. */
   startCombo(input: ComboInput): ComboNode | null {
     const root = COMBO_TREE.find((n) => n.input === input);
     if (!root) return null;
@@ -54,7 +66,6 @@ export class CombatStateMachine {
     return root;
   }
 
-  /** Try to advance the combo. Returns the new node if successful, null otherwise. */
   advanceCombo(): ComboNode | null {
     if (!this.bufferedInput || !this.currentNode) return null;
 
@@ -79,6 +90,22 @@ export class CombatStateMachine {
     this.state = "jump";
     this.stateTimer = 0;
     this.currentNode = null;
+  }
+
+  enterAirAttack(): void {
+    this.state = "airAttack";
+    this.stateTimer = 0;
+    this.hasHitThisSwing = false;
+  }
+
+  enterThrowing(): void {
+    this.state = "throwing";
+    this.stateTimer = 0;
+  }
+
+  enterUltimate(): void {
+    this.state = "ultimate";
+    this.stateTimer = 0;
   }
 
   toIdle(): void {

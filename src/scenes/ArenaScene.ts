@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { GAME_WIDTH, GAME_HEIGHT, ARENA, COLORS, COMBAT, COMBO_TREE, ComboNode } from "../config/game";
+import { GAME_WIDTH, GAME_HEIGHT, ARENA, COLORS, COMBAT, COMBO_TREE, ComboNode, ULTIMATE } from "../config/game";
 import { InputManager, Action } from "../systems/InputManager";
 import { HitFeel } from "../systems/HitFeel";
 import { Player } from "../entities/Player";
@@ -29,6 +29,7 @@ export class ArenaScene extends Phaser.Scene {
     const startX = ARENA.width / 2 - 150;
     const startY = ARENA.groundY + ARENA.groundHeight / 2;
     this.player = new Player(this, startX, startY, this.input_mgr, this.hitFeel);
+    this.player.setDummyProvider(() => this.dummies);
 
     this.spawnDummies();
     this.setupCamera();
@@ -51,6 +52,8 @@ export class ArenaScene extends Phaser.Scene {
 
     this.checkMeleeHits();
     this.checkProjectileHits();
+    this.checkAoeHits();
+    this.checkUltimateBlast();
     this.pruneDeadProjectiles();
     this.updateComboDisplay();
     this.input_mgr.postUpdate();
@@ -126,12 +129,52 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
 
+  private checkAoeHits(): void {
+    const aoe = this.player.drainAoeHit();
+    if (!aoe) return;
+
+    for (const dummy of this.dummies) {
+      if (!dummy.isAlive) continue;
+
+      const dx = Math.abs(aoe.x - dummy.x);
+      const dy = Math.abs(aoe.y - dummy.y);
+
+      if (dx < aoe.radius + dummy.width / 2 && dy < aoe.depthRange) {
+        const dir = aoe.x < dummy.x ? 1 : (aoe.x > dummy.x ? -1 : (Math.random() > 0.5 ? 1 : -1));
+        dummy.takeHit(
+          aoe.damage,
+          dir * aoe.knockback,
+          (Math.random() - 0.5) * 60
+        );
+        this.hitFeel.impactFlash(dummy.x, dummy.y - dummy.height / 3);
+      }
+    }
+  }
+
+  private checkUltimateBlast(): void {
+    if (!this.player.pendingUltBlast) return;
+    this.player.pendingUltBlast = false;
+
+    for (const dummy of this.dummies) {
+      if (!dummy.isAlive) continue;
+
+      const dir = this.player.x < dummy.x ? 1 : -1;
+      dummy.takeHit(
+        ULTIMATE.blastDamage,
+        dir * ULTIMATE.blastKnockback,
+        (Math.random() - 0.5) * 100
+      );
+      this.hitFeel.impactFlash(dummy.x, dummy.y - dummy.height / 3);
+    }
+  }
+
   private pruneDeadProjectiles(): void {
     this.projectiles = this.projectiles.filter((p) => p.alive);
   }
 
   private updateComboDisplay(): void {
     const comboId = this.player.currentComboId;
+    const specialName = this.player.currentSpecialName;
     const activeNode = comboId ? this.findNodeById(comboId) : null;
 
     for (const [id, text] of this.comboListTexts) {
@@ -146,7 +189,10 @@ export class ArenaScene extends Phaser.Scene {
       }
     }
 
-    if (activeNode) {
+    if (specialName) {
+      this.comboNameDisplay.setText(specialName);
+      this.comboNameDisplay.setAlpha(1);
+    } else if (activeNode) {
       this.comboNameDisplay.setText(activeNode.name);
       this.comboNameDisplay.setAlpha(1);
     } else if (this.comboNameDisplay.alpha > 0) {
@@ -243,7 +289,7 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private addHUD(): void {
-    const version = this.add.text(GAME_WIDTH - 16, GAME_HEIGHT - 16, "B0.3.0", {
+    const version = this.add.text(GAME_WIDTH - 16, GAME_HEIGHT - 16, "B0.4.0", {
       fontFamily: "monospace",
       fontSize: "14px",
       color: COLORS.subtitleText,
@@ -254,7 +300,7 @@ export class ArenaScene extends Phaser.Scene {
 
     const controlHint = this.add.text(16, GAME_HEIGHT - 16, "", {
       fontFamily: "monospace",
-      fontSize: "11px",
+      fontSize: "10px",
       color: COLORS.subtitleText,
     });
     controlHint.setOrigin(0, 1);
@@ -272,7 +318,11 @@ export class ArenaScene extends Phaser.Scene {
         const atk = this.input_mgr.getLabel(Action.ATTACK);
         const hvy = this.input_mgr.getLabel(Action.HEAVY);
         const jmp = this.input_mgr.getLabel(Action.JUMP);
-        controlHint.setText(`Move: ${move}  |  Light: ${atk}  |  Heavy: ${hvy}  |  Jump: ${jmp}`);
+        const thrw = this.input_mgr.getLabel(Action.THROW);
+        const ultLabel = dev === "gamepad" ? "L1+R1" : "I+L";
+        controlHint.setText(
+          `Move: ${move}  |  Light: ${atk}  |  Heavy: ${hvy}  |  Jump: ${jmp}  |  Throw: ${thrw}  |  Ult: ${ultLabel}`
+        );
       },
     });
   }
@@ -290,8 +340,9 @@ export class ArenaScene extends Phaser.Scene {
     const squareNodes = allNodes.filter((n) => n.id[0] === "L");
     const triangleNodes = allNodes.filter((n) => n.id[0] === "H");
 
-    const yTop = 14;
-    const yBot = 30;
+    const yRow1 = 14;
+    const yRow2 = 30;
+    const yRow3 = 46;
     const startX = 16;
     const spacing = 10;
 
@@ -303,7 +354,7 @@ export class ArenaScene extends Phaser.Scene {
       color: COLORS.subtitleText,
     };
 
-    const headerL = this.add.text(xCursor, yTop - 2, "Square:", {
+    const headerL = this.add.text(xCursor, yRow1 - 2, "Square:", {
       ...labelStyle,
       fontSize: "10px",
     });
@@ -313,7 +364,7 @@ export class ArenaScene extends Phaser.Scene {
     xCursor += headerL.width + 8;
 
     for (const node of squareNodes) {
-      const t = this.add.text(xCursor, yTop, node.id, labelStyle);
+      const t = this.add.text(xCursor, yRow1, node.id, labelStyle);
       t.setScrollFactor(0);
       t.setDepth(20000);
       t.setAlpha(0.5);
@@ -324,7 +375,7 @@ export class ArenaScene extends Phaser.Scene {
 
     xCursor = startX;
 
-    const headerH = this.add.text(xCursor, yBot - 2, "Triangle:", {
+    const headerH = this.add.text(xCursor, yRow2 - 2, "Triangle:", {
       ...labelStyle,
       fontSize: "10px",
     });
@@ -334,7 +385,7 @@ export class ArenaScene extends Phaser.Scene {
     xCursor += headerH.width + 8;
 
     for (const node of triangleNodes) {
-      const t = this.add.text(xCursor, yBot, node.id, labelStyle);
+      const t = this.add.text(xCursor, yRow2, node.id, labelStyle);
       t.setScrollFactor(0);
       t.setDepth(20000);
       t.setAlpha(0.5);
@@ -343,7 +394,15 @@ export class ArenaScene extends Phaser.Scene {
       xCursor += t.width + spacing;
     }
 
-    this.comboNameDisplay = this.add.text(GAME_WIDTH / 2, 54, "", {
+    const specialRow = this.add.text(startX, yRow3 - 2, "Special:  Jump+Atk: Elbow Drop  |  Circle: Throw  |  L1+R1: Ultimate", {
+      ...labelStyle,
+      fontSize: "10px",
+    });
+    specialRow.setScrollFactor(0);
+    specialRow.setDepth(20000);
+    specialRow.setAlpha(0.5);
+
+    this.comboNameDisplay = this.add.text(GAME_WIDTH / 2, 68, "", {
       fontFamily: "monospace",
       fontSize: "20px",
       color: COLORS.accent,

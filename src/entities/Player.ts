@@ -1,9 +1,10 @@
 import Phaser from "phaser";
-import { PLAYER, COLORS, ARENA, COMBAT, JUMP, ComboNode, VisualPose } from "../config/game";
+import { PLAYER, COLORS, ARENA, COMBAT, JUMP, AIR_ATTACK, THROW, ULTIMATE, ComboNode, VisualPose } from "../config/game";
 import { InputManager, Action } from "../systems/InputManager";
 import { CombatStateMachine } from "../systems/CombatState";
 import { HitFeel } from "../systems/HitFeel";
 import { ProjectileConfig } from "./Projectile";
+import { TrainingDummy } from "./TrainingDummy";
 
 export interface ProjectileSpawnRequest {
   x: number;
@@ -25,6 +26,25 @@ export interface MeleeHitBox {
   isRush: boolean;
 }
 
+export interface AoeHit {
+  x: number;
+  y: number;
+  radius: number;
+  depthRange: number;
+  damage: number;
+  knockback: number;
+  hitstopMs: number;
+  shakeIntensity: number;
+  shakeDuration: number;
+}
+
+type UltimatePhase = "setup" | "charge" | "blast" | "recovery";
+
+const HP_BAR_W = 44;
+const HP_BAR_H = 4;
+const MP_BAR_W = 44;
+const MP_BAR_H = 3;
+
 export class Player {
   readonly container: Phaser.GameObjects.Container;
 
@@ -35,6 +55,11 @@ export class Player {
 
   private beaBody: Phaser.GameObjects.Rectangle;
   private beaHead: Phaser.GameObjects.Ellipse;
+
+  private hpBarBg: Phaser.GameObjects.Rectangle;
+  private hpBarFill: Phaser.GameObjects.Rectangle;
+  private mpBarBg: Phaser.GameObjects.Rectangle;
+  private mpBarFill: Phaser.GameObjects.Rectangle;
 
   private scene: Phaser.Scene;
   private inputMgr: InputManager;
@@ -53,6 +78,21 @@ export class Player {
   private beaVisible = true;
 
   private pendingProjectiles: ProjectileSpawnRequest[] = [];
+
+  private pendingAoeHit: AoeHit | null = null;
+  private airAttackLanded = false;
+
+  private throwTarget: TrainingDummy | null = null;
+  private throwPhase: "grab" | "throw" = "grab";
+  private getDummies: (() => TrainingDummy[]) | null = null;
+
+  hp = ULTIMATE.maxHp;
+  mp = ULTIMATE.maxMp;
+
+  private ultPhase: UltimatePhase = "setup";
+  private trashCan: Phaser.GameObjects.Rectangle | null = null;
+  private ultBlastFired = false;
+  pendingUltBlast = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number, inputMgr: InputManager, hitFeel: HitFeel) {
     this.scene = scene;
@@ -81,6 +121,12 @@ export class Player {
     });
     this.nameTag.setOrigin(0.5);
 
+    const barY = PLAYER.height / 2 + 16;
+    this.hpBarBg = scene.add.rectangle(0, barY, HP_BAR_W, HP_BAR_H, COLORS.hpBarBg);
+    this.hpBarFill = scene.add.rectangle(0, barY, HP_BAR_W, HP_BAR_H, COLORS.hpBarFill);
+    this.mpBarBg = scene.add.rectangle(0, barY + HP_BAR_H + 2, MP_BAR_W, MP_BAR_H, COLORS.hpBarBg);
+    this.mpBarFill = scene.add.rectangle(0, barY + HP_BAR_H + 2, MP_BAR_W, MP_BAR_H, COLORS.mpBarFill);
+
     this.container = scene.add.container(x, y, [
       this.shadow,
       this.body,
@@ -88,6 +134,10 @@ export class Player {
       this.beaBody,
       this.beaHead,
       this.nameTag,
+      this.hpBarBg,
+      this.hpBarFill,
+      this.mpBarBg,
+      this.mpBarFill,
     ]);
 
     this.bodyBaseY = 0;
@@ -98,6 +148,16 @@ export class Player {
   get y(): number { return this.container.y; }
   get isAttacking(): boolean { return this.combat.isAttacking; }
   get currentComboId(): string | null { return this.combat.currentNode?.id ?? null; }
+  get isAirAttacking(): boolean { return this.combat.isAirAttacking; }
+  get isThrowing(): boolean { return this.combat.isThrowing; }
+  get isUltimate(): boolean { return this.combat.isUltimate; }
+
+  get currentSpecialName(): string | null {
+    if (this.combat.isAirAttacking) return "Elbow Drop";
+    if (this.combat.isThrowing) return this.throwPhase === "grab" ? "Grab!" : "Throw!";
+    if (this.combat.isUltimate) return "BEA GOES SUPER";
+    return null;
+  }
 
   get beaWorldX(): number {
     const dir = this.facingRight ? 1 : -1;
@@ -107,36 +167,84 @@ export class Player {
     return this.container.y - PLAYER.height / 2 - 28 + this.jumpOffset;
   }
 
-  /** Drain pending projectile spawn requests (called by ArenaScene each frame). */
+  setDummyProvider(fn: () => TrainingDummy[]): void {
+    this.getDummies = fn;
+  }
+
   drainProjectileRequests(): ProjectileSpawnRequest[] {
     const reqs = this.pendingProjectiles;
     this.pendingProjectiles = [];
     return reqs;
   }
 
+  drainAoeHit(): AoeHit | null {
+    const hit = this.pendingAoeHit;
+    this.pendingAoeHit = null;
+    return hit;
+  }
+
   update(dt: number): void {
     this.combat.update(dt);
+    this.regenMp(dt);
 
     if (this.combat.inHitstop) {
       this.applyHitstopVisual();
+      this.updateResourceBars();
+      return;
+    }
+
+    if (this.combat.isUltimate) {
+      this.handleUltimateSequence();
+      this.updateResourceBars();
+      return;
+    }
+
+    if (this.combat.isThrowing) {
+      this.handleThrowSequence();
+      this.applyVisualState();
+      this.updateResourceBars();
+      this.container.setDepth(this.container.y);
       return;
     }
 
     this.handleInput();
     this.handleJump(dt);
+    this.handleAirAttack(dt);
     this.handleRush(dt);
     this.handleAttackProgress(dt);
     this.handleMovement(dt);
     this.applyVisualState();
+    this.updateResourceBars();
     this.clampToBounds();
     this.container.setDepth(this.container.y);
   }
 
+  // ── Input ──
+
   private handleInput(): void {
-    if (this.inputMgr.justPressed(Action.ATTACK)) {
-      this.onComboInput("L");
-    } else if (this.inputMgr.justPressed(Action.HEAVY)) {
-      this.onComboInput("H");
+    if (this.inputMgr.bothDown(Action.DODGE, Action.SPECIAL)) {
+      this.onUltimateInput();
+      return;
+    }
+
+    if (this.inputMgr.justPressed(Action.THROW)) {
+      this.onThrowInput();
+      return;
+    }
+
+    if (this.combat.isJumping || this.combat.isAirAttacking) {
+      if (this.inputMgr.justPressed(Action.ATTACK) || this.inputMgr.justPressed(Action.HEAVY)) {
+        if (this.combat.isJumping) {
+          this.onAirAttackInput();
+        }
+        return;
+      }
+    } else {
+      if (this.inputMgr.justPressed(Action.ATTACK)) {
+        this.onComboInput("L");
+      } else if (this.inputMgr.justPressed(Action.HEAVY)) {
+        this.onComboInput("H");
+      }
     }
 
     if (this.inputMgr.justPressed(Action.JUMP)) {
@@ -145,7 +253,7 @@ export class Player {
   }
 
   private onComboInput(input: "L" | "H"): void {
-    if (this.combat.isJumping) return;
+    if (this.combat.isJumping || this.combat.isAirAttacking) return;
 
     if (!this.combat.isAttacking && !this.combat.inHitstop) {
       const node = this.combat.startCombo(input);
@@ -163,6 +271,14 @@ export class Player {
     this.jumpOffset = 0;
   }
 
+  private onAirAttackInput(): void {
+    this.combat.enterAirAttack();
+    this.airAttackLanded = false;
+    this.jumpVelocity = AIR_ATTACK.dropSpeed;
+  }
+
+  // ── Jump / Air Attack ──
+
   private handleJump(dt: number): void {
     if (!this.combat.isJumping) return;
 
@@ -177,12 +293,293 @@ export class Player {
     }
   }
 
+  private handleAirAttack(dt: number): void {
+    if (!this.combat.isAirAttacking) return;
+
+    this.jumpOffset += this.jumpVelocity * dt;
+
+    if (this.jumpOffset >= 0) {
+      this.jumpOffset = 0;
+      this.jumpVelocity = 0;
+
+      if (!this.airAttackLanded) {
+        this.airAttackLanded = true;
+        this.pendingAoeHit = {
+          x: this.container.x,
+          y: this.container.y,
+          radius: AIR_ATTACK.aoeRadius,
+          depthRange: AIR_ATTACK.aoeDepthRange,
+          damage: AIR_ATTACK.damage,
+          knockback: AIR_ATTACK.knockback,
+          hitstopMs: AIR_ATTACK.hitstopMs,
+          shakeIntensity: AIR_ATTACK.shakeIntensity,
+          shakeDuration: AIR_ATTACK.shakeDuration,
+        };
+        this.hitFeel.elbowDropImpact(this.container.x, this.container.y);
+        this.hitFeel.shake(AIR_ATTACK.shakeIntensity, AIR_ATTACK.shakeDuration);
+        this.combat.enterHitstop(AIR_ATTACK.hitstopMs);
+        this.scene.time.delayedCall(AIR_ATTACK.hitstopMs + 50, () => {
+          if (this.combat.state === "hitstop" || this.combat.isAirAttacking) {
+            this.combat.toIdle();
+          }
+        });
+      }
+    }
+  }
+
+  // ── Throw ──
+
+  private onThrowInput(): void {
+    if (this.combat.isBusy) return;
+    if (!this.getDummies) return;
+
+    const dummies = this.getDummies();
+    let closest: TrainingDummy | null = null;
+    let closestDist = Infinity;
+
+    for (const d of dummies) {
+      if (!d.isAlive) continue;
+      const dx = Math.abs(this.container.x - d.x);
+      const dy = Math.abs(this.container.y - d.y);
+      if (dx < THROW.grabRange + d.width / 2 && dy < THROW.grabDepthRange) {
+        const dist = dx + dy;
+        if (dist < closestDist) {
+          closestDist = dist;
+          closest = d;
+        }
+      }
+    }
+
+    if (!closest) return;
+
+    this.throwTarget = closest;
+    this.throwPhase = "grab";
+    this.combat.enterThrowing();
+  }
+
+  private handleThrowSequence(): void {
+    if (!this.throwTarget) {
+      this.combat.toIdle();
+      return;
+    }
+
+    const t = this.combat.stateTimer;
+
+    if (this.throwPhase === "grab") {
+      const progress = Math.min(t / THROW.grabDuration, 1);
+      const tx = Phaser.Math.Linear(this.throwTarget.x, this.container.x + (this.facingRight ? 30 : -30), progress);
+      const ty = Phaser.Math.Linear(this.throwTarget.y, this.container.y, progress);
+      this.throwTarget.setPosition(tx, ty);
+
+      if (t >= THROW.grabDuration) {
+        this.throwPhase = "throw";
+        this.combat.stateTimer = 0;
+      }
+    } else {
+      const progress = Math.min(t / THROW.throwDuration, 1);
+
+      if (progress >= 0.5 && this.throwTarget.isAlive) {
+        const dir = this.facingRight ? 1 : -1;
+        this.throwTarget.takeHit(
+          THROW.damage,
+          dir * THROW.knockback,
+          (Math.random() - 0.5) * 60
+        );
+        this.hitFeel.impactFlash(this.throwTarget.x, this.throwTarget.y - this.throwTarget.height / 3);
+        this.hitFeel.shake(THROW.shakeIntensity, THROW.shakeDuration);
+        this.throwTarget = null;
+        this.combat.toIdle();
+      }
+
+      if (t >= THROW.throwDuration) {
+        this.throwTarget = null;
+        this.combat.toIdle();
+      }
+    }
+  }
+
+  // ── Ultimate ──
+
+  private onUltimateInput(): void {
+    if (this.combat.isBusy) return;
+
+    let cost = ULTIMATE.mpCost;
+    if (this.mp >= cost) {
+      this.mp -= cost;
+    } else {
+      const mpPart = this.mp;
+      this.mp = 0;
+      const hpCost = cost - mpPart;
+      this.hp = Math.max(0, this.hp - hpCost);
+    }
+
+    this.ultPhase = "setup";
+    this.ultBlastFired = false;
+    this.pendingUltBlast = false;
+    this.combat.enterUltimate();
+  }
+
+  private handleUltimateSequence(): void {
+    const t = this.combat.stateTimer;
+    const S = ULTIMATE;
+
+    if (this.ultPhase === "setup" && t >= S.setupDuration) {
+      this.ultPhase = "charge";
+    }
+    if (this.ultPhase === "charge" && t >= S.setupDuration + S.chargeDuration) {
+      this.ultPhase = "blast";
+    }
+    if (this.ultPhase === "blast" && !this.ultBlastFired) {
+      this.ultBlastFired = true;
+      this.pendingUltBlast = true;
+      this.hitFeel.ultimateBlast(this.container.x, this.container.y);
+      this.hitFeel.shake(S.blastShakeIntensity, S.blastShakeDuration);
+    }
+    if (this.ultPhase === "blast" && t >= S.setupDuration + S.chargeDuration + S.blastDuration) {
+      this.ultPhase = "recovery";
+    }
+
+    const totalDuration = S.setupDuration + S.chargeDuration + S.blastDuration + S.recoveryDuration;
+    if (t >= totalDuration) {
+      this.endUltimate();
+      return;
+    }
+
+    this.applyUltimateVisual();
+  }
+
+  private applyUltimateVisual(): void {
+    const jOff = this.jumpOffset;
+
+    if (this.ultPhase === "setup") {
+      const p = Math.min(this.combat.stateTimer / ULTIMATE.setupDuration, 1);
+      this.beaBody.y = Phaser.Math.Linear(-PLAYER.height / 2 - 28, PLAYER.height / 2 - 20, p) + jOff;
+      this.beaHead.y = Phaser.Math.Linear(-PLAYER.height / 2 - 46, PLAYER.height / 2 - 38, p) + jOff;
+      const dir = this.facingRight ? 1 : -1;
+      this.beaBody.x = dir * p * 30;
+      this.beaHead.x = dir * p * 30;
+
+      this.body.x = -dir * p * 15;
+      this.head.x = -dir * p * 15;
+      this.head.y = this.headBaseY + p * 10 + jOff;
+      this.body.y = this.bodyBaseY + jOff;
+
+      if (p > 0.5 && !this.trashCan) {
+        this.trashCan = this.scene.add.rectangle(
+          this.container.x - dir * 35,
+          this.container.y + 5,
+          30, 45, COLORS.trashCanFill
+        );
+        this.trashCan.setStrokeStyle(2, COLORS.trashCanOutline);
+        this.trashCan.setDepth(this.container.y - 1);
+      }
+    }
+
+    if (this.ultPhase === "charge") {
+      const dir = this.facingRight ? 1 : -1;
+      this.beaBody.x = dir * 30;
+      this.beaHead.x = dir * 30;
+      this.beaBody.y = PLAYER.height / 2 - 20 + jOff;
+      this.beaHead.y = PLAYER.height / 2 - 38 + jOff;
+
+      const pulse = Math.sin(this.combat.stateTimer * 20) * 0.15;
+      this.beaBody.setScale(1 + pulse);
+      this.beaHead.setScale(1 + pulse);
+      const glowColor = Math.random() > 0.5 ? COLORS.ultimateGlow : 0xffffff;
+      this.beaBody.setFillStyle(glowColor);
+      this.beaHead.setFillStyle(glowColor);
+
+      this.body.x = -dir * 15;
+      this.head.x = -dir * 15;
+      this.head.y = this.headBaseY + 15 + jOff;
+      this.body.scaleY = 0.9;
+    }
+
+    if (this.ultPhase === "blast") {
+      const dir = this.facingRight ? 1 : -1;
+      this.beaBody.setFillStyle(0xffffff);
+      this.beaHead.setFillStyle(0xffffff);
+      this.beaBody.setScale(1.3);
+      this.beaHead.setScale(1.3);
+      this.beaBody.x = dir * 30;
+      this.beaHead.x = dir * 30;
+      this.body.x = -dir * 20;
+      this.head.x = -dir * 20;
+    }
+
+    if (this.ultPhase === "recovery") {
+      const recStart = ULTIMATE.setupDuration + ULTIMATE.chargeDuration + ULTIMATE.blastDuration;
+      const p = Math.min((this.combat.stateTimer - recStart) / ULTIMATE.recoveryDuration, 1);
+
+      this.beaBody.setFillStyle(COLORS.beaFill);
+      this.beaHead.setFillStyle(COLORS.beaFill);
+      this.beaBody.setScale(1);
+      this.beaHead.setScale(1);
+
+      const dir = this.facingRight ? 1 : -1;
+      this.beaBody.x = Phaser.Math.Linear(dir * 30, 0, p);
+      this.beaHead.x = Phaser.Math.Linear(dir * 30, 0, p);
+      this.beaBody.y = Phaser.Math.Linear(PLAYER.height / 2 - 20, -PLAYER.height / 2 - 28, p) + jOff;
+      this.beaHead.y = Phaser.Math.Linear(PLAYER.height / 2 - 38, -PLAYER.height / 2 - 46, p) + jOff;
+
+      this.body.x = Phaser.Math.Linear(-dir * 20, 0, p);
+      this.head.x = Phaser.Math.Linear(-dir * 20, 0, p);
+      this.head.y = Phaser.Math.Linear(this.headBaseY + 15, this.headBaseY, p) + jOff;
+      this.body.y = this.bodyBaseY + jOff;
+      this.body.scaleY = Phaser.Math.Linear(0.9, 1, p);
+
+      if (this.trashCan) {
+        this.trashCan.setAlpha(1 - p);
+        if (p >= 1) {
+          this.trashCan.destroy();
+          this.trashCan = null;
+        }
+      }
+    }
+  }
+
+  private endUltimate(): void {
+    this.beaBody.setFillStyle(COLORS.beaFill);
+    this.beaHead.setFillStyle(COLORS.beaFill);
+    this.beaBody.setScale(1);
+    this.beaHead.setScale(1);
+    this.body.scaleY = 1;
+    if (this.trashCan) {
+      this.trashCan.destroy();
+      this.trashCan = null;
+    }
+    this.resetPose();
+    this.combat.toIdle();
+  }
+
+  // ── MP ──
+
+  private regenMp(dt: number): void {
+    if (this.mp < ULTIMATE.maxMp) {
+      this.mp = Math.min(ULTIMATE.maxMp, this.mp + ULTIMATE.mpRegen * dt);
+    }
+  }
+
+  private updateResourceBars(): void {
+    const hpRatio = this.hp / ULTIMATE.maxHp;
+    this.hpBarFill.scaleX = hpRatio;
+    this.hpBarFill.x = -(HP_BAR_W * (1 - hpRatio)) / 2;
+
+    const mpRatio = this.mp / ULTIMATE.maxMp;
+    this.mpBarFill.scaleX = mpRatio;
+    this.mpBarFill.x = -(MP_BAR_W * (1 - mpRatio)) / 2;
+  }
+
+  // ── Rush ──
+
   private handleRush(dt: number): void {
     if (this.rushTimer <= 0) return;
     this.rushTimer -= dt;
     const dir = this.facingRight ? 1 : -1;
     this.container.x += dir * this.rushSpeed * dt;
   }
+
+  // ── Attack progress (combo trie) ──
 
   private handleAttackProgress(_dt: number): void {
     const s = this.combat;
@@ -201,7 +598,6 @@ export class Player {
     }
   }
 
-  /** Returns hit info for melee attacks only. Projectiles handle their own collision. */
   getHitBox(): MeleeHitBox | null {
     const s = this.combat;
     if (!s.isAttacking) return null;
@@ -362,18 +758,18 @@ export class Player {
     if (isHeavy) {
       this.hitFeel.swingArc(this.container.x, this.container.y, this.facingRight, true);
     } else {
-      const bx = this.beaWorldX;
-      const by = this.beaWorldY;
-      this.hitFeel.swingArc(bx, by, this.facingRight, false);
+      this.hitFeel.swingArc(this.beaWorldX, this.beaWorldY, this.facingRight, false);
     }
   }
+
+  // ── Movement ──
 
   private handleMovement(dt: number): void {
     if (this.combat.isAttacking) return;
 
     const move = this.inputMgr.getMovement();
 
-    if (this.combat.isJumping) {
+    if (this.combat.isJumping || this.combat.isAirAttacking) {
       this.container.x += move.x * PLAYER.speed * 0.6 * dt;
       this.container.y += move.y * PLAYER.depthSpeed * 0.6 * dt;
     } else {
@@ -392,6 +788,8 @@ export class Player {
     this.container.scaleX = this.facingRight ? 1 : -1;
   }
 
+  // ── Visuals ──
+
   private applyVisualState(): void {
     const s = this.combat;
     const jOff = this.jumpOffset;
@@ -407,11 +805,48 @@ export class Player {
     this.shadow.scaleX = 1 - Math.abs(jOff) / 300;
     this.shadow.scaleY = 1 - Math.abs(jOff) / 300;
 
-    if (s.isAttacking && s.currentNode) {
+    if (s.isAirAttacking) {
+      this.applyAirAttackPose();
+    } else if (s.isThrowing) {
+      this.applyThrowPose();
+    } else if (s.isAttacking && s.currentNode) {
       const progress = s.stateTimer / s.currentNode.duration;
       this.applyAttackPose(progress, s.currentNode.visual);
     } else {
       this.resetPose();
+    }
+  }
+
+  private applyAirAttackPose(): void {
+    const jOff = this.jumpOffset;
+    this.body.y = this.bodyBaseY + jOff;
+    this.body.scaleX = 1.2;
+    this.body.scaleY = 0.8;
+    this.head.y = this.headBaseY + 5 + jOff;
+    this.head.x = 0;
+    if (this.beaVisible) {
+      this.beaBody.x = 0;
+      this.beaHead.x = 0;
+      this.beaBody.y = this.bodyBaseY - 10 + jOff;
+      this.beaHead.y = this.bodyBaseY - 26 + jOff;
+    }
+  }
+
+  private applyThrowPose(): void {
+    const jOff = this.jumpOffset;
+    if (this.throwPhase === "grab") {
+      const p = Math.min(this.combat.stateTimer / THROW.grabDuration, 1);
+      this.body.scaleX = 1 + p * 0.1;
+      this.body.y = this.bodyBaseY + jOff;
+      this.head.y = this.headBaseY + jOff;
+    } else {
+      const p = Math.min(this.combat.stateTimer / THROW.throwDuration, 1);
+      const swing = Math.sin(p * Math.PI);
+      this.body.scaleX = 1 + swing * 0.15;
+      this.body.scaleY = 1 - swing * 0.1;
+      this.head.x = swing * 10;
+      this.body.y = this.bodyBaseY + jOff;
+      this.head.y = this.headBaseY + jOff;
     }
   }
 

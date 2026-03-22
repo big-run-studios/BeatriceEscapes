@@ -17,6 +17,20 @@ Design doc versions use `D<major>.<minor>`. Build versions use `B0.<layer>.<patc
 - Onion development plan: 12 layers from bootable canvas to polished prototype.
 - Tech stack decision: Phaser 3 + TypeScript + Vite.
 
+## [B0.4.0] — 2026-03-21
+
+### Build — Layer 4: Air Attacks, Throws, and Ultimates
+
+- **Elbow Drop air attack** — press Square or Triangle while airborne. Andrew tucks Bea onto his chest and drops fast. AOE shockwave on landing hits all nearby enemies. Screenshake, dust ring VFX.
+- **Throw system** — press Circle near a dummy to grab and throw. Grabbed dummy is pulled in, then launched with high damage (40) and knockback (500). Belt-scroller classic.
+- **Ultimate: Bea Goes Super Saiyan** — L1+R1 triggers a cinematic sequence. Andrew sets Bea down, ducks behind a trash can (which appears from nowhere). Bea glows yellow/white, pulses, then unleashes a full-screen electric wind blast. All enemies take 80 damage. Massive screenshake, expanding rings, electric arc VFX, screen flash.
+- **MP/HP resource system** — ultimate costs 50 MP. If MP is low, the remainder comes from HP (risk/reward). MP regenerates at 5/s. HP and MP bars displayed below the player.
+- **Jump tuning** — height increased to 240 (from 180), duration to 0.85s (from 0.7s). Big, readable Scott Pilgrim-level arc with hang time for air attacks.
+- **New combat states** — airAttack, throwing, ultimate added to the state machine.
+- **Input changes** — Circle remapped from Block to Throw. L1+R1 simultaneous press triggers ultimate. F key for throw on keyboard, I+L for ultimate.
+- **HitFeel VFX** — elbowDropImpact (ring shockwave + dust particles), ultimateBlast (3 expanding rings, 12 electric arcs, screen flash overlay).
+- **HUD updates** — third row showing special moves (Elbow Drop, Throw, Ultimate). Control hint bar includes Throw and Ult labels. Combo name display shows special move names.
+
 ## [B0.3.0] — 2026-03-21
 
 ### Build — Layer 3: Combo Tree, Projectiles, and Jump Tuning

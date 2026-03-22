@@ -10,6 +10,7 @@ export enum Action {
   SPECIAL,
   UTILITY,
   JUMP,
+  THROW,
   DODGE,
   BLOCK,
   CONFIRM,
@@ -63,11 +64,11 @@ const KEY_DISPLAY_LABELS: Record<string, string> = {
 
 const DEFAULT_GAMEPAD_MAP: ButtonMapping[] = [
   { action: Action.JUMP, button: 0 },      // X (Cross)
-  { action: Action.BLOCK, button: 1 },     // Circle — defensive action
+  { action: Action.THROW, button: 1 },     // Circle — throw/grab
   { action: Action.ATTACK, button: 2 },    // Square — light attack (Bea)
   { action: Action.HEAVY, button: 3 },     // Triangle — heavy attack (Andrew)
-  { action: Action.DODGE, button: 4 },     // L1
-  { action: Action.SPECIAL, button: 5 },   // R1
+  { action: Action.DODGE, button: 4 },     // L1 (also used for ultimate with R1)
+  { action: Action.SPECIAL, button: 5 },   // R1 (also used for ultimate with L1)
   { action: Action.UTILITY, button: 6 },   // L2
   { action: Action.PAUSE, button: 9 },     // Options
   { action: Action.CONFIRM, button: 0 },   // X (Cross) — contextual confirm
@@ -91,7 +92,7 @@ const DEFAULT_KEYBOARD_MAP: KeyMapping[] = [
   { action: Action.HEAVY, key: "K" },
   { action: Action.SPECIAL, key: "L" },
   { action: Action.JUMP, key: "SPACE" },
-  { action: Action.BLOCK, key: "SHIFT" },
+  { action: Action.THROW, key: "F" },
   { action: Action.DODGE, key: "I" },
   { action: Action.CONFIRM, key: "ENTER" },
   { action: Action.BACK, key: "ESC" },
@@ -203,6 +204,11 @@ export class InputManager {
       }
     }
     return "?";
+  }
+
+  /** True if both actions are currently held down simultaneously. */
+  bothDown(a: Action, b: Action): boolean {
+    return this.isDown(a) && this.isDown(b);
   }
 
   /** Returns a normalized {x, y} vector for movement (stick + dpad + keyboard). */

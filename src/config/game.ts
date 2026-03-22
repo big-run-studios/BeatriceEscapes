@@ -17,8 +17,8 @@ export const PLAYER = {
 };
 
 export const JUMP = {
-  height: 180,
-  duration: 0.7,
+  height: 240,
+  duration: 0.85,
 };
 
 export type ComboInput = "L" | "H";
@@ -165,6 +165,44 @@ export const COMBAT = {
   meleeHitDepthRange: 55,
 };
 
+export const AIR_ATTACK = {
+  damage: 35,
+  knockback: 300,
+  hitstopMs: 80,
+  aoeRadius: 100,
+  aoeDepthRange: 70,
+  dropSpeed: 800,
+  shakeIntensity: 6,
+  shakeDuration: 100,
+};
+
+export const THROW = {
+  grabRange: 60,
+  grabDepthRange: 40,
+  grabDuration: 0.3,
+  throwDuration: 0.3,
+  damage: 40,
+  knockback: 500,
+  shakeIntensity: 5,
+  shakeDuration: 80,
+};
+
+export const ULTIMATE = {
+  mpCost: 50,
+  maxMp: 100,
+  mpRegen: 5,
+  maxHp: 100,
+  blastDamage: 80,
+  blastKnockback: 500,
+  blastHitstopMs: 120,
+  blastShakeIntensity: 10,
+  blastShakeDuration: 200,
+  setupDuration: 0.4,
+  chargeDuration: 0.6,
+  blastDuration: 0.5,
+  recoveryDuration: 1.0,
+};
+
 export const COLORS = {
   background: 0x0a0a1a,
   titleText: "#e8d5b5",
@@ -180,6 +218,11 @@ export const COLORS = {
   hpBarBg: 0x1a1a1a,
   hpBarFill: 0x44aa44,
   hpBarDamage: 0xdd4444,
+  mpBarFill: 0x4488dd,
+  trashCanFill: 0x555555,
+  trashCanOutline: 0x777777,
+  ultimateGlow: 0xffee44,
+  electricArc: 0x88ddff,
   groundFill: 0x1a1a2e,
   groundLine: 0x2a2a4e,
   wallFill: 0x0f0f20,

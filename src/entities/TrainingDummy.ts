@@ -63,6 +63,11 @@ export class TrainingDummy {
   get width(): number { return DUMMY_WIDTH; }
   get height(): number { return DUMMY_HEIGHT; }
 
+  setPosition(x: number, y: number): void {
+    this.container.x = x;
+    this.container.y = y;
+  }
+
   update(dt: number): void {
     if (!this.alive) return;
 
