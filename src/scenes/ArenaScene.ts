@@ -93,6 +93,10 @@ export class ArenaScene extends Phaser.Scene {
     this.player.setDummyProvider(() => this.getAllTargets());
     if (this.config.mode === "run") {
       this.player.setBoonState(this.runState.boons);
+      if (this.runState.playerHp >= 0) {
+        this.player.hp = this.runState.playerHp;
+        this.player.mp = this.runState.playerMp;
+      }
     }
 
     if (this.config.mode === "dummies") {
@@ -277,6 +281,9 @@ export class ArenaScene extends Phaser.Scene {
     this.cleanupDeadEnemies();
 
     this.fireBoonEvent("onRoomClear", { x: this.player.x, y: this.player.y });
+
+    this.runState.playerHp = this.player.hp;
+    this.runState.playerMp = this.player.mp;
 
     this.victoryTriggered = true;
     this.sceneEnding = true;

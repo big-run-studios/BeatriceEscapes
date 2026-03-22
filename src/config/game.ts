@@ -47,6 +47,7 @@ export interface ComboNode {
   visual: VisualPose;
   shakeIntensity: number;
   shakeDuration: number;
+  mpCost?: number;
   projectile?: { radius: number; speed: number; color: number; maxRange: number };
   rush?: { speed: number; duration: number };
   burstCount?: number;
@@ -58,33 +59,37 @@ const PROJ_MEDIUM = { radius: 14, speed: 400, color: 0x55aaff, maxRange: 450 };
 const PROJ_BLAST = { radius: 16, speed: 350, color: 0xffcc44, maxRange: 500 };
 
 export const COMBO_TREE: ComboNode[] = [
-  // ── Square (L) branch: Bea wind shots ──
+  // ── Square (L) branch: Bea wind shots (chip pokes, low damage) ──
   {
     id: "L", name: "Wind Shot", input: "L",
-    duration: 0.28, hitFrame: 0.1, damage: 8, knockback: 40, hitstopMs: 30,
+    duration: 0.28, hitFrame: 0.1, damage: 5, knockback: 30, hitstopMs: 20,
     moveType: "projectile", visual: "bea-cast",
     shakeIntensity: 1, shakeDuration: 30,
+    mpCost: 6,
     projectile: PROJ_SMALL,
     children: [
       {
         id: "LL", name: "Wind Shot 2", input: "L",
-        duration: 0.24, hitFrame: 0.08, damage: 8, knockback: 40, hitstopMs: 30,
+        duration: 0.24, hitFrame: 0.08, damage: 5, knockback: 30, hitstopMs: 20,
         moveType: "projectile", visual: "bea-cast",
         shakeIntensity: 1, shakeDuration: 30,
+        mpCost: 6,
         projectile: PROJ_SMALL,
         children: [
           {
             id: "LLL", name: "Wind Shot 3", input: "L",
-            duration: 0.22, hitFrame: 0.07, damage: 10, knockback: 50, hitstopMs: 30,
+            duration: 0.22, hitFrame: 0.07, damage: 5, knockback: 30, hitstopMs: 20,
             moveType: "projectile", visual: "bea-cast",
             shakeIntensity: 1, shakeDuration: 30,
+            mpCost: 6,
             projectile: PROJ_SMALL,
             children: [
               {
                 id: "LLLL", name: "Big Wind Ball", input: "L",
-                duration: 0.4, hitFrame: 0.15, damage: 20, knockback: 180, hitstopMs: 60,
+                duration: 0.4, hitFrame: 0.15, damage: 12, knockback: 150, hitstopMs: 50,
                 moveType: "projectile", visual: "bea-big-cast",
                 shakeIntensity: 3, shakeDuration: 60,
+                mpCost: 12,
                 projectile: PROJ_MEDIUM,
                 children: [],
               },
@@ -99,7 +104,7 @@ export const COMBO_TREE: ComboNode[] = [
           },
           {
             id: "LLH", name: "Slam", input: "H",
-            duration: 0.5, hitFrame: 0.22, damage: 28, knockback: 250, hitstopMs: 80,
+            duration: 0.5, hitFrame: 0.22, damage: 35, knockback: 250, hitstopMs: 80,
             moveType: "melee", visual: "andrew-slam",
             shakeIntensity: 5, shakeDuration: 90,
             children: [],
@@ -108,29 +113,29 @@ export const COMBO_TREE: ComboNode[] = [
       },
       {
         id: "LH", name: "Uppercut", input: "H",
-        duration: 0.45, hitFrame: 0.18, damage: 22, knockback: 200, hitstopMs: 60,
+        duration: 0.45, hitFrame: 0.18, damage: 28, knockback: 200, hitstopMs: 60,
         moveType: "melee", visual: "andrew-uppercut",
         shakeIntensity: 4, shakeDuration: 70,
         children: [],
       },
     ],
   },
-  // ── Triangle (H) branch: Andrew haymakers ──
+  // ── Triangle (H) branch: Andrew haymakers (power moves, high damage) ──
   {
     id: "H", name: "Haymaker", input: "H",
-    duration: 0.5, hitFrame: 0.22, damage: 25, knockback: 200, hitstopMs: 80,
+    duration: 0.5, hitFrame: 0.22, damage: 30, knockback: 200, hitstopMs: 80,
     moveType: "melee", visual: "andrew-punch",
     shakeIntensity: 4, shakeDuration: 70,
     children: [
       {
         id: "HH", name: "Haymaker 2", input: "H",
-        duration: 0.5, hitFrame: 0.22, damage: 25, knockback: 200, hitstopMs: 80,
+        duration: 0.5, hitFrame: 0.22, damage: 30, knockback: 200, hitstopMs: 80,
         moveType: "melee", visual: "andrew-punch",
         shakeIntensity: 4, shakeDuration: 70,
         children: [
           {
             id: "HHH", name: "Bull Rush", input: "H",
-            duration: 0.55, hitFrame: 0.05, damage: 30, knockback: 350, hitstopMs: 60,
+            duration: 0.55, hitFrame: 0.05, damage: 40, knockback: 350, hitstopMs: 60,
             moveType: "rush", visual: "andrew-rush",
             shakeIntensity: 6, shakeDuration: 100,
             rush: { speed: 450, duration: 0.5 },
@@ -141,6 +146,7 @@ export const COMBO_TREE: ComboNode[] = [
             duration: 0.5, hitFrame: 0.2, damage: 25, knockback: 280, hitstopMs: 80,
             moveType: "projectile", visual: "bea-finisher",
             shakeIntensity: 5, shakeDuration: 90,
+            mpCost: 12,
             projectile: PROJ_BLAST,
             children: [],
           },
@@ -148,9 +154,10 @@ export const COMBO_TREE: ComboNode[] = [
       },
       {
         id: "HL", name: "Shoulder Burst", input: "L",
-        duration: 0.45, hitFrame: 0.1, damage: 8, knockback: 60, hitstopMs: 30,
+        duration: 0.45, hitFrame: 0.1, damage: 5, knockback: 40, hitstopMs: 20,
         moveType: "burst", visual: "bea-burst",
         shakeIntensity: 2, shakeDuration: 40,
+        mpCost: 12,
         projectile: PROJ_SMALL,
         burstCount: 3,
         children: [],
@@ -164,6 +171,10 @@ export const COMBAT = {
   meleeHitRange: 80,
   meleeHitDepthRange: 55,
   blockSpeedMultiplier: 0.25,
+  heavyStepDistance: 30,
+  heavyStepDuration: 120,
+  lightStepBackDistance: 12,
+  lightStepBackDuration: 100,
 };
 
 export const AIR_ATTACK = {
@@ -191,7 +202,7 @@ export const THROW = {
 export const ULTIMATE = {
   mpCost: 50,
   maxMp: 100,
-  mpRegen: 5,
+  mpRegen: 8,
   maxHp: 100,
   blastDamage: 80,
   blastKnockback: 500,
@@ -205,29 +216,80 @@ export const ULTIMATE = {
 };
 
 export const DASH = {
-  doubleTapWindow: 0.25,
+  doubleTapWindow: 0.18,
   speed: 750,
   duration: 0.22,
   cooldown: 0.3,
+  lightMpCost: 8,
+  lightDamage: 15,
+  lightKnockback: 250,
+  lightHitstopMs: 50,
+  lightShakeIntensity: 3,
+  lightShakeDuration: 60,
+  heavyDamage: 30,
+  heavyKnockback: 400,
+  heavyHitstopMs: 80,
+  heavyShakeIntensity: 6,
+  heavyShakeDuration: 90,
+  attackDuration: 0.35,
+  attackHitRange: 90,
+  attackDepthRange: 55,
 };
 
 export const ENEMY = {
   width: 40,
   height: 70,
-  baseHp: 60,
-  baseDamage: 10,
-  baseSpeed: 80,
-  hpPerLevel: 0.375,
+  baseHp: 40,
+  baseDamage: 5,
+  baseSpeed: 60,
+  hpPerLevel: 0.4,
   damagePerLevel: 0.25,
   speedPerLevel: 0.125,
   attackRange: 65,
   attackDepthRange: 40,
-  windupDuration: 0.5,
   attackDuration: 0.25,
-  recoverDuration: 0.4,
   hitstunDuration: 0.35,
+  hitstunThreshold: 15,
+  flinchDuration: 0.1,
   knockbackFriction: 500,
   deathDuration: 0.4,
+};
+
+export type AILevelPair = [number, number];
+
+export function aiLerp(pair: AILevelPair, level: number): number {
+  const t = Math.min((level - 1) / 4, 1);
+  return pair[0] + (pair[1] - pair[0]) * t;
+}
+
+export const ENEMY_AI = {
+  engageSlots: 2,
+
+  assessDuration: [0.35, 0.06] as AILevelPair,
+  windupDuration: [0.65, 0.3] as AILevelPair,
+  recoverDuration: [0.45, 0.2] as AILevelPair,
+
+  evadeChance: [0.15, 0.9] as AILevelPair,
+  evadeSpeed: [180, 350] as AILevelPair,
+  evadeDuration: 0.3,
+  evadeCooldown: [1.5, 0.4] as AILevelPair,
+
+  circleRadius: [220, 140] as AILevelPair,
+  circleSpeed: [0.6, 1.6] as AILevelPair,
+
+  flankAccuracy: [0.4, 0.95] as AILevelPair,
+  flankOffset: [70, 140] as AILevelPair,
+  flankWideArc: [0.3, 0.85] as AILevelPair,
+
+  retreatChance: [0.1, 0.7] as AILevelPair,
+  retreatDistance: [160, 240] as AILevelPair,
+
+  allySpacing: [25, 60] as AILevelPair,
+
+  projectileDodgeChance: [0.1, 0.85] as AILevelPair,
+  projectileAwareness: [40, 180] as AILevelPair,
+
+  chaseAngleOffset: [0.05, 0.4] as AILevelPair,
 };
 
 export const PICKUP = {
@@ -253,6 +315,8 @@ export const PLAYER_HIT = {
   recoveryDuration: 0.6,
   knockbackSpeed: 200,
   blockDamageReduction: 0.7,
+  iFrameDuration: 0.8,
+  hitKnockbackStep: 120,
 };
 
 export const COLORS = {

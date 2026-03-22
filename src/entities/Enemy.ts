@@ -478,8 +478,6 @@ export class Enemy {
   takeHit(damage: number, knockbackX: number, knockbackY: number): void {
     if (!this.alive) return;
     this.hp -= damage;
-    this.knockbackVx = knockbackX;
-    this.knockbackVy = knockbackY;
     this.flashWhite();
 
     if (this.hp <= 0) {
@@ -488,7 +486,26 @@ export class Enemy {
       return;
     }
 
-    this.enterState("hitstun");
+    if (damage >= ENEMY.hitstunThreshold) {
+      this.knockbackVx = knockbackX;
+      this.knockbackVy = knockbackY;
+      this.enterState("hitstun");
+    } else {
+      this.knockbackVx = knockbackX * 0.3;
+      this.knockbackVy = knockbackY * 0.3;
+      this.flinch();
+    }
+  }
+
+  private flinch(): void {
+    const dir = this.knockbackVx > 0 ? 1 : -1;
+    this.body.x = dir * 4;
+    this.head.x = dir * 3;
+    this.scene.time.delayedCall(ENEMY.flinchDuration * 1000, () => {
+      if (!this.alive) return;
+      this.body.x = 0;
+      this.head.x = 0;
+    });
   }
 
   // ── Anti-stacking ──

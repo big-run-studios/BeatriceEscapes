@@ -85,6 +85,8 @@ export class Player {
   // Dash
   private lastTapRight = 0;
   private lastTapLeft = 0;
+  private releasedRight = true;
+  private releasedLeft = true;
   private dashCooldownTimer = 0;
   private dashDir = 1;
   private prevMoveX = 0;
@@ -368,17 +370,26 @@ export class Player {
   checkDoubleTapDash(move: { x: number; y: number }): void {
     if (this.combat.isBusy || this.dashCooldownTimer > 0) return;
 
-    const threshold = 0.7;
+    const tapThreshold = 0.7;
+    const releaseThreshold = 0.3;
     const now = this.scene.time.now / 1000;
 
-    const rightFlick = (move.x > threshold && this.prevMoveX <= threshold)
-      || this.inputMgr.justPressed(Action.RIGHT);
-    const leftFlick = (move.x < -threshold && this.prevMoveX >= -threshold)
-      || this.inputMgr.justPressed(Action.LEFT);
+    if (move.x < releaseThreshold) this.releasedRight = true;
+    if (move.x > -releaseThreshold) this.releasedLeft = true;
+
+    const rightTap = this.releasedRight && (
+      (move.x > tapThreshold && this.prevMoveX <= tapThreshold)
+      || this.inputMgr.justPressed(Action.RIGHT)
+    );
+    const leftTap = this.releasedLeft && (
+      (move.x < -tapThreshold && this.prevMoveX >= -tapThreshold)
+      || this.inputMgr.justPressed(Action.LEFT)
+    );
 
     this.prevMoveX = move.x;
 
-    if (rightFlick) {
+    if (rightTap) {
+      this.releasedRight = false;
       if (now - this.lastTapRight < DASH.doubleTapWindow && this.lastTapRight > 0) {
         this.startDash(1);
         this.lastTapRight = 0;
@@ -386,7 +397,8 @@ export class Player {
       }
       this.lastTapRight = now;
     }
-    if (leftFlick) {
+    if (leftTap) {
+      this.releasedLeft = false;
       if (now - this.lastTapLeft < DASH.doubleTapWindow && this.lastTapLeft > 0) {
         this.startDash(-1);
         this.lastTapLeft = 0;

@@ -18,6 +18,8 @@ export class RunState {
   character: string;
   isRunMode: boolean;
   wizardPool: string[];
+  playerHp = -1;
+  playerMp = -1;
 
   constructor(opts?: { character?: string; roomPlan?: RoomDef[]; wizardPool?: string[] }) {
     this.boons = new BoonState();
