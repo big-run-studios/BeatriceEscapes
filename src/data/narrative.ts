@@ -21,6 +21,60 @@ export const RUN_OUTLINES: NarrativeCategory = {
   label: "Run Outlines",
   entries: [
     {
+      id: "opening", title: "The Opening — Bea's Birthday", unlocked: true,
+      body:
+`THE BIRTHDAY PARTY:
+- Backyard. Streamers. A homemade banner: "HAPPY 6TH BIRTHDAY BEA!" in glitter glue.
+- Andrew is grilling. Heather is directing the chaos. John is modifying a piñata with suspicious enthusiasm.
+- Luna is eating frosting off an unattended cupcake. Nobody stops her.
+- Neighborhood kids running around. Mrs. Henderson brought potato salad. Normal, perfect, boring Saturday.
+- Bea is the center of everything. Crown on her head. Biggest smile in the world.
+
+THE CAKE:
+- Six candles. The family sings. Off-key, loud, wonderful.
+- "Make a wish, sweetie."
+- Bea closes her eyes. Squeezes them shut. Concentrates with her whole body.
+- She blows.
+
+THE FIREBALL:
+- The candles don't go out. They go UP.
+- A column of violet fire erupts from the cake. It rockets into the sky, arcs sideways, and hits Mrs. Henderson's mailbox.
+- The mailbox becomes a frog. A big frog. It ribbits.
+- Car alarms go off up and down the block. A garden gnome across the street shatters.
+- Every dog in the neighborhood starts howling. Luna starts wagging her tail.
+- The kids scatter. Parents grab children. Someone screams. Someone else laughs nervously.
+- Frosting is on the ceiling of the patio. Cake is gone. Just gone. Not destroyed — transformed into pure energy.
+
+THE LOOK:
+- Andrew and Heather lock eyes across the ruined party.
+- They don't say anything. But they both KNOW something. More than they're letting on.
+- A beat. Then:
+- Andrew: "Everyone inside. Now."
+- Heather is already grabbing the go-bag she's apparently had packed for years.
+- John: "Was that MAGIC? That was magic, right? That was DEFINITELY—"
+- Andrew: "Inside. NOW."
+
+THE SIRENS:
+- Distant at first. Getting closer. Fast.
+- Not police sirens. Different. A pulse. A hum.
+- Andrew looks at the sky. Black SUVs are already turning onto their street.
+- Andrew: "...They're already here."
+- Heather: "They were always watching. I told you. I told you this would happen."
+- Andrew: "You KNEW?"
+- Heather: "You knew too. Don't pretend you didn't."
+- [Beat. They stare at each other. Years of secrets in one look.]
+- Andrew: "...We'll talk about this later."
+
+BEA:
+- Standing in the backyard. Surrounded by the aftermath. Not scared. Not confused.
+- Looking at her hands. They're still glowing, faintly, violet.
+- Bea: "...I made the frog."
+- Andrew scoops her up. She goes on his shoulders. Where she'll stay.
+- Andrew: "OK. Nobody panic."
+- Heather: "Too late."
+- They go inside. The run begins.`,
+    },
+    {
       id: "run-1", title: "Run 1 — The Birthday", unlocked: true,
       body:
 `HUB BEFORE:
@@ -28,28 +82,40 @@ export const RUN_OUTLINES: NarrativeCategory = {
 - Andrew: "OK, nobody panic." Heather: "Too late."
 - Bea is confused, not scared. She thinks the fireball was cool.
 - Family grabs supplies from the house: backpack, snacks, John's slingshot, Luna's leash (she won't wear it)
-- Starting Boon: Merlin appears briefly at the back door. "Take this, child. You'll need it." Offers one boon.
 
-ZONE 1 — THE BURBS:
+STARTING BOON (Back Door):
+- Merlin appears briefly. "Take this, child. You'll need it."
+- Choose 1 of 3 offered boons — Merlin's pool only (Arcane Spark variants).
+- This is the FIRST boon of the run, not the only one.
+
+BOON POOL: Merlin only. Small selection. ~3-5 total boons possible across Zones 1-2.
+- Wizard blessing rooms appear but only offer Merlin's boons on Run 1.
+- Combat rooms reward common boons from the general pool.
+- No shops yet (wizard vendors haven't revealed themselves).
+
+ZONE 1 — THE BURBS (5-7 rooms):
 - First MaRC sirens. Family scrambles through backyards and playgrounds.
 - Neighbors peeking through blinds. Mrs. Henderson's frog-mailbox is ribbiting.
+- Room doors preview rewards: combat (boon), wizard blessing (choose 1 of 3), or family moment.
 - Mini-boss: Neighborhood Watch Captain with a megaphone. "STAY WHERE YOU ARE, CITIZENS."
 - Boss: Field Commander in an armored SUV. First real fight.
 - Boss reveals: MaRC knows about Bea specifically. They have a file on her.
 
-ZONE 2 — DOYLESTOWN:
+ZONE 2 — DOYLESTOWN (5-7 rooms):
 - [Most players die at Zone 1 or 2 boss on Run 1]
 - Small-town charm. Mercer Museum in the background. Farmers market stalls as cover.
+- First shop room appears (bookshop wizard selling boons for run money).
 - Boss: Checkpoint Commander blocks the road out of town.
 - Boss reveals: MaRC has been watching the Bell family for years.
 
-ZONE 3 — PHILADELPHIA:
+ZONE 3 — PHILADELPHIA (5-7 rooms):
 - [If reached] City streets, warehouse district, PHL airport.
+- Elite combat rooms start appearing — tougher enemies, rare boon rewards.
 - ONE-TIME STORY BEAT: Family tries to board a plane. MaRC agents everywhere. Arrested at the gate.
 - Transported by MaRC boat to the Bermuda Triangle.
 - Boss: Pursuit Specialist in a capture mech. "You have no idea where you're going."
 
-ZONE 4 — BERMUDA TRIANGLE:
+ZONE 4 — BERMUDA TRIANGLE (5-7 rooms):
 - First glimpse of the island. Volcanic rock, lab buildings, containment fences.
 - Director captures the family. "Welcome to the Triangle. Nobody leaves the Triangle."
 - Player doesn't win this fight. Director is too strong.
@@ -70,19 +136,30 @@ HUB AFTER:
 - Heather packs a real go-bag this time. John modifies his slingshot with parts from the garage.
 - Bea: "Can we do the thing where I blow up the cake again?" Andrew: "Please don't."
 
+STARTING BOON (Back Door):
+- Merlin offers 3 boons again, but now Circe is also available. Choose 1 of 3 from the expanded pool.
+
+BOON POOL: Merlin + Circe + Prospero. ~6-8 total boons possible.
+- Wizard blessing rooms now rotate between Merlin, Circe, and Prospero.
+- Shops appear in Doylestown — bookshop wizard sells boons and healing.
+- Rescue events start appearing (trapped wizard NPCs in combat rooms).
+
 ZONE 1 — THE BURBS:
 - Faster, smoother. They know which yards to cut through.
+- More room variety: combat, blessings, and the first family moment rooms.
 - Boss: Field Commander is confused. "Didn't we already—? How are you—?"
 - Boss reveals: MaRC agents don't remember the reset. Only the Bells do.
 
 ZONE 2 — DOYLESTOWN:
 - Bookshop wizard catches Andrew's eye. Winks. First sign of the wizard community.
-- New boon source appears: Circe. "My, what a talented little girl."
+- Circe appears in a wizard blessing room. "My, what a talented little girl."
+- First proper shop room: the bookshop wizard sells boons for run money.
 - Boss: Checkpoint Commander. Reveals MaRC has anti-magic dampener technology.
 - Family gets a car at the edge of town. (Whose car? Don't ask.)
 
 ZONE 3 — PHILADELPHIA:
 - Family avoids the airport this time. Takes the back roads.
+- Elite combat rooms appear — rare boons as rewards.
 - Wizard portal to the Triangle (Merlin's doing). "A shortcut. Mind the turbulence."
 
 ZONE 4 — BERMUDA TRIANGLE:
@@ -105,7 +182,17 @@ HUB AFTER:
 - New wizard visitors during runs: Baba Yaga, Anansi
 - Baba Yaga tests the family: "You think you're ready? You're not. But you're entertaining."
 
-ZONE 1-3: Family is noticeably stronger. Combos feel better. More boons available.
+STARTING BOON (Back Door):
+- Now choose from Merlin, Circe, Prospero, Baba Yaga, Anansi, John Dee, or Morgan le Fay.
+
+BOON POOL: 7 wizards active. Full room variety unlocks. ~10-15 boons per run.
+- All room types available: combat, elite, wizard blessing, shop, rescue, family moment.
+- Boon synergies start appearing — Merlin's chain lightning + Circe's weakness = devastating combos.
+- Shops now stock rarer boons. Rescue events reward unique character-specific boons.
+
+ZONE 1-3: Family is noticeably stronger. Combos feel better. Builds start to come online.
+- More doors to choose from. Route decisions matter — boon room or shop? Elite for rare boon or safe combat?
+- First signature boons appear (character-specific, transform core mechanics).
 
 ZONE 4 — BERMUDA TRIANGLE:
 - Push deeper than before. Discover the containment wing exists.
@@ -130,6 +217,18 @@ HUB AFTER:
 - Andrew: "Buddy, your flashlight fires stun beams. That's not science."
 - More wizards visit: Hecate, Morgan le Fay
 - Morgan le Fay is protective of Bea: "This child's power is extraordinary. And MaRC knows it."
+
+STARTING BOON (Back Door):
+- 9 wizards now in the pool. Hecate and Medea join.
+
+BOON POOL: 9 wizards active. Duo boons unlock. ~12-15 boons per run.
+- Duo boons: when you hold boons from two specific wizards, a special combined boon is offered.
+  Example: Merlin's Arcane Spark + Morgan's Hex Curse = "Cursed Lightning" (chain damage that also DOTs).
+- Elite rooms now have a chance to drop legendary boons.
+- Builds are getting serious — players should feel meaningfully different run to run.
+
+ZONE 1-3: Builds come online faster. Family powers awakening under pressure.
+- New room variants: ambush rooms (surprise attack, bonus resources), rescue events with wizard children.
 
 ZONE 4 — BERMUDA TRIANGLE:
 - Find evidence of missing wizards. Names scratched into cell doors.
@@ -158,6 +257,19 @@ HUB AFTER:
   - Heather: "She's been protecting us this whole time?"
   - [Luna wags tail, drops a glowing tennis ball]
 
+STARTING BOON (Back Door):
+- Full wizard roster: all 10 including Nicolas Flamel. Choose 1 of 3 from the complete pool.
+
+BOON POOL: ALL 10 WIZARDS ACTIVE. Full build variety. ~15-20 boons per run.
+- Flamel's risk/reward boons enter the pool — debuff yourself, then gain massive bonuses.
+- Legendary boons appear in elite rooms and as rare shop stock.
+- Duo boons fully active — dozens of combinations possible.
+- The "every run feels different" promise is fully realized from here on.
+
+ZONE 1-3: Builds come online early. Players are powerful and the zones reflect it.
+- New elite variants, ambush rooms, and multi-reward rooms.
+- Route choices are meaningful — chase a specific duo combo or diversify?
+
 ZONE 4 — BERMUDA TRIANGLE:
 - Stop trying to escape the island. Go deeper intentionally.
 - Discover MaRC is harvesting wizard magic to power something massive.
@@ -180,9 +292,17 @@ HUB AFTER:
 - John builds a scanner from parts and magic. It can detect containment pods.
 - Prospero: "The storms around the island are artificial. I can weaken them."
 
+BOON POOL: Full roster. Mature builds. ~15-20 boons per run.
+- Players are experienced enough to chase specific builds intentionally.
+- New boon combinations unlocked by house upgrades (Wizard Favor, Witch's Blessing).
+- Freed wizard NPCs from rescue events start appearing as extra shop vendors on the island.
+
+ZONE 1-3: Familiar but varied. Route knowledge lets players optimize boon paths.
+
 ZONE 4 — BERMUDA TRIANGLE:
 - Deeper levels. Labs where magic is extracted. Machinery humming with stolen power.
 - See wizard children in pods. Bea's age. This is personal for Bea now.
+- New room type on the island: sabotage rooms (disable MaRC systems for bonuses in later rooms).
 - Director: "You keep coming back. Why? What do you think you'll find?"
 - Director, defeat: "You found Level 6. There are 12 levels."
 
@@ -200,6 +320,12 @@ HUB AFTER:
 - Morgan le Fay: "My apprentice. She was 14."
 - Circe: "My daughter."
 - The stakes are fully personal for everyone now.
+
+BOON POOL: Full roster. New island-specific boons from freed prisoners. ~15-20 boons per run.
+- Rescued wizards from previous runs offer gratitude boons — unique, powerful, story-tied.
+- Prisoner wizard boons have island-themed effects (anti-dampener, containment break, etc.).
+
+ZONE 1-3: Player is powerful. Can push through aggressively, stacking boons for Zone 4.
 
 ZONE 4 — BERMUDA TRIANGLE:
 - Find the first prisoners. Conscious but weak. Can't free them yet — machines too strong.
@@ -222,10 +348,17 @@ HUB AFTER:
 - Every wizard contributes something to the plan.
 - John Dee: "I've calculated the resonance frequency of the containment pods. Bea's magic can disrupt it."
 
+BOON POOL: Full roster + prisoner boons + house-upgraded rarity. ~15-20 boons per run.
+- Max-tier house upgrades boost boon rarity across the board.
+- Builds at this point can be devastating — players should feel like an unstoppable force.
+
+ZONE 1-3: Player is marching, not scrambling. Boons stack fast. Enemies feel the difference.
+
 ZONE 4 — BERMUDA TRIANGLE:
 - Reach the machine core for the first time. Level 10 of 12.
 - See the scale. Hundreds of containment pods. A cathedral of stolen magic.
 - The machines pulse with violet light. The same color as Bea's fireball.
+- Anti-magic technician rooms try to suppress your boons — high-pressure encounters that test your build.
 - Director: "Every wizard on this island powers the dampener grid for the entire eastern seaboard. Free them and magic runs wild. Chaos. Destruction. Is that what you want?"
 
 HUB AFTER:
@@ -246,9 +379,16 @@ HUB AFTER:
 - Heather: "Good."
 - John builds the Disruptor: a device tuned to Bea's magical frequency.
 
+BOON POOL: Everything. Every wizard, every tier, every combination. ~15-20+ boons.
+- Freed prisoners from Run 8 offer sabotage-themed boons (disable dampeners in rooms, reveal hidden paths).
+- Players should be experimenting with legendary + duo combinations for maximum impact.
+
+ZONE 1-3: Blazing through. The family knows every shortcut, every shop, every blessing room.
+
 ZONE 4 — BERMUDA TRIANGLE:
 - Sabotage key systems. Disable guard barracks. Free some prisoners on the outer levels.
-- Freed wizards join the fight. Temporary allies in combat.
+- Freed wizards join the fight. Temporary allies in combat rooms.
+- Sabotage rooms from Run 6 pay off — disabled systems mean easier paths on Levels 8-11.
 - Director: "You're dismantling everything. Do you know how long it took to build this?"
 - Director, defeat: "Tomorrow I'll have twice the guards. It won't matter. You can't reach Level 12."
 
@@ -269,8 +409,17 @@ HUB AFTER:
 - John activates the Disruptor. It hums with Bea's frequency.
 - Family walks out the back door together. All of them. Even the stuffed bear.
 
+STARTING BOON (Back Door):
+- All 10 wizards present. Choose from the complete pool. Legendary boons offered as starting options.
+
+BOON POOL: MAXIMUM. All boon pools active. All rarities. All duos. ~18-20+ boons.
+- Every room is stacked. Shops sell legendaries. Blessings offer rare+.
+- This is the ultimate build run — the culmination of everything the player has learned about synergies.
+- Wizard Favor and Witch's Blessing house upgrades at max tiers ensure premium drops.
+
 ZONE 1-3: The family is at peak power. The zones feel different. They're not running — they're marching.
 - Bosses are terrified. Field Commander: "They're not running this time. They're not RUNNING."
+- Players should have a game-breaking build by Zone 3 — and they'll need it.
 
 ZONE 4 — BERMUDA TRIANGLE:
 - Deepest level. Level 12. The core.
@@ -278,6 +427,7 @@ ZONE 4 — BERMUDA TRIANGLE:
 - Director's final form. He's connected to the machines now. Drawing power from the prisoners.
 - Multi-phase fight. Family + wizard allies vs. the entire island.
 - Phase 3: Director at full power. "I AM the dampener grid. You can't stop this without stopping ME."
+- Every boon the player stacked matters here. The build IS the story payoff.
 - Bea steps forward. Hands glowing. The violet fire from the birthday party, but controlled now. Focused.
 - Bea: "NEVER AGAIN."
 - Family combines all powers. Andrew's earth, Heather's amplification, John's tech-magic, Luna's ley-line force, all channeled through Bea.
@@ -327,7 +477,7 @@ export const HUB_SCENES: NarrativeCategory = {
     { id: "hub-living", title: "The Living Room", subtitle: "Starting Room", unlocked: true,
       body: "NPC conversations with visiting wizards/witches. Couch talks, fireplace chats.\n\n- Wizards who visit the house hang out here\n- Relationship conversations happen on the couch\n- Lore and world-building unfolds naturally\n- Always available from Run 1" },
     { id: "hub-backdoor", title: "The Back Door", subtitle: "Starting Room", unlocked: true,
-      body: "\"Make a run for it.\" Start the run from here.\n\n- Starting boon offered here (choose 1 of 3)\n- Family lines before departing\n- Equivalent to Hades' courtyard exit\n- Always available from Run 1" },
+      body: "\"Make a run for it.\" Start the run from here.\n\n- Starting boon offered here (choose 1 of 3 from available wizard pool)\n- This is the FIRST boon of the run — many more come from rooms during the run\n- Pool grows across runs as more wizards join (Run 1: Merlin only, Run 5+: all 10)\n- Family lines before departing change based on run number and story progress\n- Equivalent to Hades' courtyard exit\n- Always available from Run 1" },
 
     // ── Unlockable Rooms ──
     { id: "hub-mancave", title: "Andrew's Man Cave", subtitle: "Unlocks Run 2", unlocked: true,
@@ -340,6 +490,53 @@ export const HUB_SCENES: NarrativeCategory = {
       body: "REVEAL: She knew all along.\n\n- Crayon drawings on every wall — they glow in the dark, shift when you look away\n- Stuffed animals that move when no one's looking (but they're shy)\n- A mobile above her crib that orbits without any string\n- Tea party set that actually makes tea (enchanted)\n\nBEA: \"The bear told me not to tell anyone. He said it wasn't time yet.\"\nANDREW: \"...the bear?\"\n[Stuffed bear waves]\nHEATHER: \"How long have you known, sweetie?\"\nBEA: \"Always. The magic is everywhere. You just stopped looking.\"\n\nUPGRADE FOCUS: Bea's magic power, projectile damage, MP pool, reset charges" },
     { id: "hub-doghouse", title: "Luna's Doghouse", subtitle: "Unlocks Run 5", unlocked: true,
       body: "REVEAL: Luna's been patrolling ley lines at night.\n\n- Ley line patrol routes scratched into the doghouse floor\n- Chew toys that are actually ancient artifacts\n- A buried collection of magical objects from around the neighborhood\n- Paw prints that glow along the backyard fence line\n\nHEATHER: \"She's been protecting us this whole time?\"\nANDREW: \"Every night. While we slept.\"\n[Luna wags tail, drops a glowing tennis ball at Bea's feet]\nBEA: \"Good girl, Luna. The best girl.\"\n\nUPGRADE FOCUS: Luna's speed, momentum, instinct dodge, ley-line abilities" },
+
+    // ── Run Structure ──
+    { id: "hub-room-flow", title: "Room-to-Room Flow", subtitle: "How Runs Work (Hades Model)", unlocked: true,
+      body:
+`Each zone has 5-7 rooms. After clearing a room, choose a door — each door previews its reward type. You build your loadout as you go, stacking boons across the entire run.
+
+DOOR TYPES:
+- Combat Encounter — 2-3 waves of MaRC enemies. Reward: common boon or resources.
+- Elite Encounter — Tougher enemies with elite modifiers. Reward: rare boon.
+- Wizard Blessing — A wizard appears and offers 3 boons. Choose 1. Free.
+- Shop / Wizard Vendor — Spend run money on boons, healing, or utility items.
+- Rescue Event — Help a trapped wizard NPC. Reward: unique boon or temporary ally.
+- Family Moment — Brief narrative beat (banter, argument, encouragement). Reward: small stat buff.
+- Mini-Boss — Scripted fight gating the next zone.
+- Zone Boss — End-of-zone boss fight.
+
+TYPICAL BOON FLOW PER ZONE:
+- Starting boon at the Back Door (choose 1 of 3 from available wizard pool)
+- 1-2 wizard blessing rooms per zone
+- 1-2 combat rewards per zone
+- 0-1 shop per zone
+- 0-1 rescue event per zone
+- Approximate total: 8-20 boons per full 4-zone run depending on route and luck
+
+BOON CATEGORIES:
+- Offensive — Bonus damage types, combo extenders, attack speed, area effects
+- Defensive — Shields, damage reduction, HP regeneration, status resistance
+- Utility — Movement speed, cooldown reduction, resource generation, room-clear bonuses
+- Synergy — Boons that power up when combined with specific other boons or allies
+- Signature — Character-specific boons that enhance or transform core mechanics
+
+RARITY TIERS: Common > Uncommon > Rare > Legendary
+- Higher rarity from elite encounters, lucky shops, or Wizard Favor house upgrade
+- Legendary boons transform playstyle (e.g., Luna's Howl: takedowns fear all enemies on screen)
+
+STACKING RULES:
+- Most boons stack with everything — the fun is in the combinations
+- Some legendaries are mutually exclusive to force interesting choices
+- Goal: "every run feels like a different build"
+
+BOON POOL GROWTH (by run):
+- Run 1: Merlin only. Small pool. ~3-5 boons if you reach Zone 2.
+- Run 2: Merlin + Circe + Prospero. More variety. ~6-8 boons.
+- Run 3: Add Baba Yaga, Anansi, John Dee, Morgan le Fay. Full room variety unlocks. ~10-15 boons.
+- Run 4: Add Hecate, Medea. Duo boons possible (when two wizards' boons combine).
+- Run 5+: Full roster including Flamel. Legendary boons appear in elite rooms. ~12-20 boons.
+- Run 10: All pools active. Maximum build variety. Every run feels unique.` },
 
     // ── House Upgrades ──
     { id: "hub-upgrades", title: "House Upgrades", subtitle: "Mirror of Night Equivalent", unlocked: true,
