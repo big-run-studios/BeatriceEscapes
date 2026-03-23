@@ -1,34 +1,94 @@
 import {
-  BoonDef, BoonTrigger, BoonAction,
-  EventContext, ALL_BOON_POOLS, RARITY_WEIGHTS,
+  BoonDef, BoonSlot, BoonTrigger, BoonAction,
+  EventContext, ALL_BOON_POOLS, RARITY_WEIGHTS, scaleDamage,
 } from "../data/boons";
+
+export interface SlottedBoon {
+  boon: BoonDef;
+  level: number;
+}
 
 function diminishingFactor(stacks: number): number {
   if (stacks <= 1) return 1;
   return 1 / (1 + 0.5 * (stacks - 1));
 }
 
+function scaleAction(action: BoonAction, level: number): BoonAction {
+  if (level <= 1) return action;
+  switch (action.kind) {
+    case "chain_spark":
+      return { ...action, damage: Math.round(scaleDamage(action.damage, level)) };
+    case "lightning_aoe":
+      return { ...action, damage: Math.round(scaleDamage(action.damage, level)) };
+    case "damage_burst":
+      return { ...action, damage: Math.round(scaleDamage(action.damage, level)) };
+    case "speed_burst":
+      return { ...action, duration: scaleDamage(action.duration, level) };
+    case "heal":
+      return { ...action, amount: scaleDamage(action.amount, level) };
+    case "poison":
+      return { ...action, damagePerTick: Math.round(scaleDamage(action.damagePerTick, level)) };
+  }
+}
+
 export class BoonState {
-  readonly activeBoons: BoonDef[] = [];
+  private readonly slots = new Map<BoonSlot, SlottedBoon>();
+  private readonly passiveBoons: BoonDef[] = [];
   private stackCounts = new Map<string, number>();
   private cooldowns = new Map<string, number>();
   private _speedBurst = 0;
   private _speedMultiplier = 1;
 
+  get activeBoons(): BoonDef[] {
+    const result: BoonDef[] = [];
+    for (const sb of this.slots.values()) result.push(sb.boon);
+    result.push(...this.passiveBoons);
+    return result;
+  }
+
+  getSlot(slot: BoonSlot): SlottedBoon | undefined {
+    return this.slots.get(slot);
+  }
+
+  getSlotForBoon(boon: BoonDef): { current: SlottedBoon | null; resultLevel: number } {
+    if (!boon.slot) return { current: null, resultLevel: 1 };
+    const existing = this.slots.get(boon.slot);
+    if (!existing) return { current: null, resultLevel: 1 };
+    if (existing.boon.id === boon.id) {
+      return { current: existing, resultLevel: existing.level + 1 };
+    }
+    return { current: existing, resultLevel: existing.level + 1 };
+  }
+
   addBoon(boon: BoonDef): void {
+    if (boon.slot) {
+      const existing = this.slots.get(boon.slot);
+      if (existing) {
+        const newLevel = existing.level + 1;
+        this.slots.set(boon.slot, { boon, level: newLevel });
+      } else {
+        this.slots.set(boon.slot, { boon, level: 1 });
+      }
+      return;
+    }
+
     if (boon.stackable) {
       const current = this.stackCounts.get(boon.id) ?? 0;
       this.stackCounts.set(boon.id, current + 1);
       if (current === 0) {
-        this.activeBoons.push(boon);
+        this.passiveBoons.push(boon);
       }
     } else {
-      this.activeBoons.push(boon);
+      this.passiveBoons.push(boon);
     }
   }
 
   getStackCount(boonId: string): number {
     return this.stackCounts.get(boonId) ?? 0;
+  }
+
+  getSlotLevel(slot: BoonSlot): number {
+    return this.slots.get(slot)?.level ?? 0;
   }
 
   get speedBurstMultiplier(): number {
@@ -39,7 +99,20 @@ export class BoonState {
     let additive = 0;
     let multiplicative = 1;
 
-    for (const boon of this.activeBoons) {
+    for (const sb of this.slots.values()) {
+      for (const effect of sb.boon.effects) {
+        if (effect.type !== "stat") continue;
+        if (effect.stat !== stat) continue;
+        if (effect.mode === "add") {
+          additive += scaleDamage(effect.value, sb.level);
+        } else {
+          const bonus = effect.value - 1;
+          multiplicative *= 1 + scaleDamage(bonus, sb.level);
+        }
+      }
+    }
+
+    for (const boon of this.passiveBoons) {
       for (const effect of boon.effects) {
         if (effect.type !== "stat") continue;
         if (effect.stat !== stat) continue;
@@ -89,19 +162,19 @@ export class BoonState {
   fireEvent(trigger: BoonTrigger, _ctx: EventContext): BoonAction[] {
     const actions: BoonAction[] = [];
 
-    for (const boon of this.activeBoons) {
-      for (const effect of boon.effects) {
+    for (const sb of this.slots.values()) {
+      for (const effect of sb.boon.effects) {
         if (effect.type !== "triggered") continue;
         if (effect.trigger !== trigger) continue;
 
-        const cdKey = `${boon.id}:${trigger}:${effect.action.kind}`;
+        const cdKey = `${sb.boon.id}:${trigger}:${effect.action.kind}`;
         if (effect.cooldown && (this.cooldowns.get(cdKey) ?? 0) > 0) continue;
 
         if (effect.cooldown) {
           this.cooldowns.set(cdKey, effect.cooldown);
         }
 
-        actions.push(effect.action);
+        actions.push(scaleAction(effect.action, sb.level));
       }
     }
 
@@ -136,10 +209,25 @@ export class BoonState {
       if (boons) pool.push(...boons);
     }
 
-    const owned = new Set(this.activeBoons.map((b) => b.id));
-    const available = pool.filter((b) => b.stackable || !owned.has(b.id));
-    if (available.length === 0) return [];
+    const ownedPassiveIds = new Set(this.passiveBoons.map((b) => b.id));
+    let available = pool.filter((b) => {
+      if (b.slot) return true;
+      return b.stackable || !ownedPassiveIds.has(b.id);
+    });
 
+    if (available.length < count) {
+      const stackable = pool.filter((b) => b.stackable);
+      while (available.length < count && stackable.length > 0) {
+        const pick = stackable[Math.floor(Math.random() * stackable.length)];
+        if (!available.some(b => b.id === pick.id)) {
+          available.push(pick);
+        } else {
+          available.push({ ...pick });
+        }
+      }
+    }
+
+    if (available.length === 0) return [];
     return weightedSample(available, Math.min(count, available.length));
   }
 }

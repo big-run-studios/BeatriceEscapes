@@ -1,4 +1,4 @@
-# Bea Escapes — Game Pillars & Prototype North Star
+# Regal Guardians — Game Pillars & Prototype North Star
 
 > **Version:** D1.1 | **Last Updated:** 2026-03-22
 
@@ -660,5 +660,17 @@ The prototype is a success if:
 5. **Co-op is more fun than solo.** Two players together should feel like they're *actually* escaping as a family, not just two characters on the same screen.
 
 ---
+
+---
+
+## Build Log
+
+| Build | Layer | Description |
+|-------|-------|-------------|
+| B0.6.0 | 6 | Rooms + Boons — trigger/effect boon system, Merlin pool, RoomMapScene |
+| B0.6.1 | 6 | Stackable stat boons with diminishing returns, 8-room Zone 1 |
+| B0.6.2 | 6 | Combat balance — dash fix, HP/MP persistence, hitstun threshold |
+| B0.7.0 | 7 | John character — wiffle bat, slingshot, Smash-style directional moves, parry/guard stance, Nerf Bazooka ultimate |
+| B0.8.0 | 8 | Branching map + scrolling levels — 6-layer node graph with door choices, Scott Pilgrim-style wave-triggered combat sections with screen lock/unlock and GO! prompts |
 
 *This is a living document. Update it as design decisions are tested, validated, or revised through prototyping.*

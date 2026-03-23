@@ -1,12 +1,14 @@
 import Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT, COLORS } from "../config/game";
 import { InputManager, Action } from "../systems/InputManager";
+import { initPSGlyphs, PromptLine, PromptPart, PS_NAV } from "../ui/ButtonGlyphs";
 import {
   NarrativeEntry,
   NarrativeCategory,
   ALL_CATEGORIES,
 } from "../data/narrative";
 import { TTSService } from "../systems/TTSService";
+import { AudioManager } from "../systems/AudioManager";
 
 type NavLevel = "category" | "list" | "detail";
 
@@ -48,6 +50,7 @@ export class NarrativeScene extends Phaser.Scene {
 
   create(): void {
     this.inputMgr = new InputManager(this);
+    initPSGlyphs(this);
     this.level = "category";
     this.cursorIndex = 0;
     this.scrollOffset = 0;
@@ -69,6 +72,8 @@ export class NarrativeScene extends Phaser.Scene {
   }
 
   update(): void {
+    AudioManager.instance.heartbeat();
+
     if (this.inputGracePeriod > 0) {
       this.inputGracePeriod--;
       this.inputMgr.postUpdate();
@@ -174,12 +179,11 @@ export class NarrativeScene extends Phaser.Scene {
       this.uiObjects.push(bg, labelText, descText);
     }
 
-    const hint = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 40, "", {
+    const hint = new PromptLine(this, GAME_WIDTH / 2, GAME_HEIGHT - 40, this.inputMgr, {
       fontFamily: "monospace",
       fontSize: "12px",
       color: COLORS.subtitleText,
     });
-    hint.setOrigin(0.5);
     hint.setDepth(20);
     this.uiObjects.push(hint);
 
@@ -189,13 +193,9 @@ export class NarrativeScene extends Phaser.Scene {
         loop: true,
         callback: () => {
           if (!hint.active) return;
-          const nav =
-            this.inputMgr.lastDevice === "gamepad" ? "L-Stick/D-Pad" : "W/S";
-          const confirm = this.inputMgr.getLabel(Action.CONFIRM);
-          const back = this.inputMgr.getLabel(Action.BACK);
-          hint.setText(
-            `${nav} to navigate  |  ${confirm} to open  |  ${back} to exit`
-          );
+          const isGP = this.inputMgr.lastDevice === "gamepad";
+          const nav: PromptPart = isGP ? PS_NAV.STICK_DPAD : "W/S";
+          hint.setPrompt([nav, " to navigate  |  ", Action.CONFIRM, " to open  |  ", Action.BACK, " to exit"]);
         },
       })
     );
@@ -364,12 +364,11 @@ export class NarrativeScene extends Phaser.Scene {
     scrollInfo.setDepth(16);
     this.uiObjects.push(scrollInfo);
 
-    const hint = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 40, "", {
+    const hint = new PromptLine(this, GAME_WIDTH / 2, GAME_HEIGHT - 40, this.inputMgr, {
       fontFamily: "monospace",
       fontSize: "12px",
       color: COLORS.subtitleText,
     });
-    hint.setOrigin(0.5);
     hint.setDepth(20);
     this.uiObjects.push(hint);
 
@@ -379,13 +378,9 @@ export class NarrativeScene extends Phaser.Scene {
         loop: true,
         callback: () => {
           if (!hint.active) return;
-          const nav =
-            this.inputMgr.lastDevice === "gamepad" ? "L-Stick/D-Pad" : "W/S";
-          const confirm = this.inputMgr.getLabel(Action.CONFIRM);
-          const back = this.inputMgr.getLabel(Action.BACK);
-          hint.setText(
-            `${nav} to scroll  |  ${confirm} to read  |  ${back} to go back`
-          );
+          const isGP = this.inputMgr.lastDevice === "gamepad";
+          const nav: PromptPart = isGP ? PS_NAV.STICK_DPAD : "W/S";
+          hint.setPrompt([nav, " to scroll  |  ", Action.CONFIRM, " to read  |  ", Action.BACK, " to go back"]);
         },
       })
     );
@@ -591,12 +586,11 @@ export class NarrativeScene extends Phaser.Scene {
     }
 
     // ── Bottom hint ──
-    const hint = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 36, "", {
+    const hint = new PromptLine(this, GAME_WIDTH / 2, GAME_HEIGHT - 36, this.inputMgr, {
       fontFamily: "monospace",
       fontSize: "12px",
       color: COLORS.subtitleText,
     });
-    hint.setOrigin(0.5);
     hint.setDepth(20);
     this.uiObjects.push(hint);
 
@@ -606,17 +600,18 @@ export class NarrativeScene extends Phaser.Scene {
         loop: true,
         callback: () => {
           if (!hint.active) return;
-          const back = this.inputMgr.getLabel(Action.BACK);
-          const navLabel = this.inputMgr.lastDevice === "gamepad" ? "L-Stick" : "W/S";
-          const scrollable = maxScroll > 0 ? `${navLabel} to scroll  |  ` : "";
+          const isGP = this.inputMgr.lastDevice === "gamepad";
+          const parts: PromptPart[] = [];
 
-          let ttsHint = "";
-          if (this.tts.isReady) {
-            const playKey = this.inputMgr.lastDevice === "gamepad" ? "Square" : "J";
-            ttsHint = `${playKey} to narrate  |  `;
+          if (maxScroll > 0) {
+            parts.push(isGP ? PS_NAV.STICK : "W/S", " to scroll  |  ");
           }
+          if (this.tts.isReady) {
+            parts.push(Action.ATTACK, " to narrate  |  ");
+          }
+          parts.push(Action.BACK, " to go back");
 
-          hint.setText(`${scrollable}${ttsHint}${back} to go back`);
+          hint.setPrompt(parts);
         },
       })
     );
@@ -637,18 +632,8 @@ export class NarrativeScene extends Phaser.Scene {
     }
 
     if (this.tts.isReady) {
-      if (this.inputMgr.justPressed(Action.ATTACK)) {
-        console.log("[NarrativeScene] ATTACK pressed, triggering TTS");
+      if (this.inputMgr.justPressed(Action.HEAVY)) {
         this.tts.togglePlayPause(this.activeEntry.body, this.activeEntry.id);
-      }
-
-      if (this.inputMgr.justPressed(Action.LEFT)) {
-        this.tts.stop();
-        this.tts.cycleVoice(-1);
-      }
-      if (this.inputMgr.justPressed(Action.RIGHT)) {
-        this.tts.stop();
-        this.tts.cycleVoice(1);
       }
     }
 

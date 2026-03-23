@@ -16,6 +16,7 @@ export enum Action {
   CONFIRM,
   BACK,
   PAUSE,
+  DEBUG,
 }
 
 interface ButtonMapping {
@@ -70,6 +71,7 @@ const DEFAULT_GAMEPAD_MAP: ButtonMapping[] = [
   { action: Action.DODGE, button: 4 },     // L1 (also used for ultimate with R1)
   { action: Action.SPECIAL, button: 5 },   // R1 (also used for ultimate with L1)
   { action: Action.UTILITY, button: 6 },   // L2
+  { action: Action.DEBUG, button: 7 },     // R2
   { action: Action.PAUSE, button: 9 },     // Options
   { action: Action.CONFIRM, button: 0 },   // X (Cross) — contextual confirm
   { action: Action.BACK, button: 1 },      // Circle — contextual back
@@ -97,6 +99,7 @@ const DEFAULT_KEYBOARD_MAP: KeyMapping[] = [
   { action: Action.CONFIRM, key: "ENTER" },
   { action: Action.BACK, key: "ESC" },
   { action: Action.PAUSE, key: "ESC" },
+  { action: Action.DEBUG, key: "BACKTICK" },
 ];
 
 export class InputManager {
@@ -109,6 +112,9 @@ export class InputManager {
   private _gamepadId = "";
   private _lastDevice: InputDevice = "keyboard";
   private _hasReceivedInput = false;
+
+  private prevStickX = 0;
+  private prevStickY = 0;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -189,6 +195,14 @@ export class InputManager {
     this._hasReceivedInput = true;
   }
 
+  /** Returns the gamepad button index mapped to an action, or undefined if not found. */
+  getButtonIndex(action: Action): number | undefined {
+    for (const mapping of this.padMap) {
+      if (mapping.action === action) return mapping.button;
+    }
+    return undefined;
+  }
+
   /** Returns the display label for an action based on the last-used input device. */
   getLabel(action: Action): string {
     if (this.lastDevice === "gamepad") {
@@ -249,6 +263,8 @@ export class InputManager {
         const btn = gamepad.buttons[mapping.button];
         this.prevPadButtons.set(mapping.button, btn ? btn.pressed : false);
       }
+      this.prevStickX = gamepad.axes.length > 0 ? gamepad.axes[0].getValue() : 0;
+      this.prevStickY = gamepad.axes.length > 1 ? gamepad.axes[1].getValue() : 0;
     }
   }
 
@@ -320,6 +336,15 @@ export class InputManager {
         if (btn && btn.pressed && !wasDown) return true;
       }
     }
+
+    const lx = gamepad.axes.length > 0 ? gamepad.axes[0].getValue() : 0;
+    const ly = gamepad.axes.length > 1 ? gamepad.axes[1].getValue() : 0;
+    const thresh = STICK_DEADZONE + 0.15;
+    if (action === Action.LEFT && lx < -thresh && this.prevStickX >= -thresh) return true;
+    if (action === Action.RIGHT && lx > thresh && this.prevStickX <= thresh) return true;
+    if (action === Action.UP && ly < -thresh && this.prevStickY >= -thresh) return true;
+    if (action === Action.DOWN && ly > thresh && this.prevStickY <= thresh) return true;
+
     return false;
   }
 }

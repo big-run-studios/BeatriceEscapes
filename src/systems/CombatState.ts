@@ -2,9 +2,9 @@ import { ComboNode, ComboInput, COMBO_TREE } from "../config/game";
 
 export type PlayerState =
   | "idle" | "walk" | "attacking" | "jump" | "airAttack"
-  | "throwing" | "ultimate" | "blocking" | "dashing"
+  | "throwing" | "ultimate" | "blocking" | "dashing" | "dashAttack"
   | "hitstun" | "knockdown" | "recovering" | "dead"
-  | "hitstop";
+  | "hitstop" | "parrying" | "parryRecovery" | "guarding";
 
 export class CombatStateMachine {
   state: PlayerState = "idle";
@@ -24,20 +24,26 @@ export class CombatStateMachine {
   get isUltimate(): boolean { return this.state === "ultimate"; }
   get isBlocking(): boolean { return this.state === "blocking"; }
   get isDashing(): boolean { return this.state === "dashing"; }
+  get isDashAttacking(): boolean { return this.state === "dashAttack"; }
   get isHitstun(): boolean { return this.state === "hitstun"; }
   get isKnockdown(): boolean { return this.state === "knockdown"; }
   get isRecovering(): boolean { return this.state === "recovering"; }
   get isDead(): boolean { return this.state === "dead"; }
+  get isParrying(): boolean { return this.state === "parrying"; }
+  get isParryRecovery(): boolean { return this.state === "parryRecovery"; }
+  get isGuarding(): boolean { return this.state === "guarding"; }
 
   get isBusy(): boolean {
     return this.isAttacking || this.inHitstop || this.isJumping
       || this.isAirAttacking || this.isThrowing || this.isUltimate
-      || this.isBlocking || this.isDashing
-      || this.isHitstun || this.isKnockdown || this.isRecovering || this.isDead;
+      || this.isBlocking || this.isDashing || this.isDashAttacking
+      || this.isHitstun || this.isKnockdown || this.isRecovering || this.isDead
+      || this.isParrying || this.isParryRecovery || this.isGuarding;
   }
 
   get isVulnerable(): boolean {
-    return !this.isDashing && !this.isRecovering && !this.isDead;
+    return !this.isDashing && !this.isDashAttacking && !this.isUltimate
+      && !this.isHitstun && !this.isKnockdown && !this.isRecovering && !this.isDead;
   }
 
   update(dt: number): void {
@@ -89,10 +95,14 @@ export class CombatStateMachine {
   enterUltimate(): void { this.state = "ultimate"; this.stateTimer = 0; }
   enterBlocking(): void { this.state = "blocking"; this.stateTimer = 0; }
   enterDashing(): void { this.state = "dashing"; this.stateTimer = 0; }
+  enterDashAttack(): void { this.state = "dashAttack"; this.stateTimer = 0; this.hasHitThisSwing = false; }
   enterHitstun(): void { this.state = "hitstun"; this.stateTimer = 0; this.currentNode = null; this.bufferedInput = null; }
   enterKnockdown(): void { this.state = "knockdown"; this.stateTimer = 0; }
   enterRecovering(): void { this.state = "recovering"; this.stateTimer = 0; }
   enterDead(): void { this.state = "dead"; this.stateTimer = 0; }
+  enterParrying(): void { this.state = "parrying"; this.stateTimer = 0; }
+  enterParryRecovery(): void { this.state = "parryRecovery"; this.stateTimer = 0; }
+  enterGuarding(): void { this.state = "guarding"; this.stateTimer = 0; }
 
   toIdle(): void {
     this.state = "idle";

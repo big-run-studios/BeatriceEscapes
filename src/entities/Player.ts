@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import {
   PLAYER, COLORS, ARENA, COMBAT, JUMP, AIR_ATTACK, THROW, ULTIMATE,
-  DASH, PLAYER_HIT, ComboNode, VisualPose,
+  DASH, PLAYER_HIT, ComboNode,
 } from "../config/game";
 import { InputManager, Action } from "../systems/InputManager";
 import { CombatStateMachine } from "../systems/CombatState";
@@ -9,9 +9,11 @@ import { HitFeel } from "../systems/HitFeel";
 import { BoonState } from "../systems/BoonState";
 import { ProjectileConfig } from "./Projectile";
 import { TrainingDummy } from "./TrainingDummy";
+import { AB_SHEET_KEY, AB_SPRITE_SCALE } from "./AndrewBeaAnims";
 
 export interface ProjectileSpawnRequest {
   x: number; y: number; facingRight: boolean; config: ProjectileConfig;
+  isHeavy?: boolean;
 }
 
 export interface MeleeHitBox {
@@ -36,13 +38,9 @@ const MP_BAR_H = 3;
 export class Player {
   readonly container: Phaser.GameObjects.Container;
 
-  private body: Phaser.GameObjects.Rectangle;
-  private head: Phaser.GameObjects.Rectangle;
+  private sprite: Phaser.GameObjects.Sprite;
   private shadow: Phaser.GameObjects.Ellipse;
   private nameTag: Phaser.GameObjects.Text;
-
-  private beaBody: Phaser.GameObjects.Rectangle;
-  private beaHead: Phaser.GameObjects.Ellipse;
 
   private hpBarBg: Phaser.GameObjects.Rectangle;
   private hpBarFill: Phaser.GameObjects.Rectangle;
@@ -55,15 +53,11 @@ export class Player {
   private hitFeel: HitFeel;
   facingRight = true;
 
-  private bodyBaseY = 0;
-  private headBaseY: number;
-
   private jumpOffset = 0;
   private jumpVelocity = 0;
 
   private rushTimer = 0;
   private rushSpeed = 0;
-  private beaVisible = true;
 
   private pendingProjectiles: ProjectileSpawnRequest[] = [];
   private pendingAoeHit: AoeHit | null = null;
@@ -81,6 +75,11 @@ export class Player {
   private trashCan: Phaser.GameObjects.Rectangle | null = null;
   private ultBlastFired = false;
   pendingUltBlast = false;
+  pendingDirectionalUltBlast = 0;
+  boundsMinX = ARENA.boundaryPadding + PLAYER.width / 2;
+  boundsMaxX = ARENA.width - ARENA.boundaryPadding - PLAYER.width / 2;
+  activeStatuses: string[] = [];
+  private statusIconText!: Phaser.GameObjects.Text;
 
   // Dash
   private lastTapRight = 0;
@@ -107,33 +106,28 @@ export class Player {
     this.combat = new CombatStateMachine();
 
     this.shadow = scene.add.ellipse(0, PLAYER.height / 2 + 4, PLAYER.width + 16, 14, 0x000000, 0.3);
-    this.body = scene.add.rectangle(0, 0, PLAYER.width, PLAYER.height, COLORS.andrewFill);
-    this.body.setStrokeStyle(2, COLORS.andrewOutline);
-    this.head = scene.add.rectangle(0, -PLAYER.height / 2 - 12, PLAYER.width * 0.7, 24, COLORS.andrewFill);
-    this.head.setStrokeStyle(2, COLORS.andrewOutline);
-    this.beaBody = scene.add.rectangle(0, -PLAYER.height / 2 - 28, 22, 28, COLORS.beaFill);
-    this.beaBody.setStrokeStyle(2, COLORS.beaOutline);
-    this.beaHead = scene.add.ellipse(0, -PLAYER.height / 2 - 46, 18, 18, COLORS.beaFill);
-    this.beaHead.setStrokeStyle(2, COLORS.beaOutline);
-    this.nameTag = scene.add.text(0, -PLAYER.height / 2 - 62, "ANDREW & BEA", {
-      fontFamily: "monospace", fontSize: "10px", color: "#5a9bba",
-    });
-    this.nameTag.setOrigin(0.5);
+
+    this.sprite = scene.add.sprite(0, PLAYER.height / 2, AB_SHEET_KEY, 7);
+    this.sprite.setOrigin(0.5, 1.0);
+    this.sprite.setScale(AB_SPRITE_SCALE);
+
+    this.nameTag = scene.add.text(0, 0, "", { fontSize: "1px" });
+    this.nameTag.setAlpha(0);
 
     const barY = PLAYER.height / 2 + 16;
     this.hpBarBg = scene.add.rectangle(0, barY, HP_BAR_W, HP_BAR_H, COLORS.hpBarBg);
     this.hpBarFill = scene.add.rectangle(0, barY, HP_BAR_W, HP_BAR_H, COLORS.hpBarFill);
     this.mpBarBg = scene.add.rectangle(0, barY + HP_BAR_H + 2, MP_BAR_W, MP_BAR_H, COLORS.hpBarBg);
     this.mpBarFill = scene.add.rectangle(0, barY + HP_BAR_H + 2, MP_BAR_W, MP_BAR_H, COLORS.mpBarFill);
+    this.statusIconText = scene.add.text(HP_BAR_W / 2 + 3, barY - 4, "", {
+      fontFamily: "monospace", fontSize: "8px", color: "#cc66ff",
+    });
 
     this.container = scene.add.container(x, y, [
-      this.shadow, this.body, this.head,
-      this.beaBody, this.beaHead, this.nameTag,
+      this.shadow, this.sprite, this.nameTag,
       this.hpBarBg, this.hpBarFill, this.mpBarBg, this.mpBarFill,
+      this.statusIconText,
     ]);
-
-    this.bodyBaseY = 0;
-    this.headBaseY = -PLAYER.height / 2 - 12;
   }
 
   get x(): number { return this.container.x; }
@@ -197,6 +191,7 @@ export class Player {
     this.iFrameFlashTimer = 0;
     this.container.setAlpha(1);
     this.container.scaleY = 1;
+    this.sprite.clearTint();
     this.resetPose();
   }
 
@@ -459,7 +454,7 @@ export class Player {
         if (this.mp >= DASH.lightMpCost) {
           this.mp -= DASH.lightMpCost;
           this.pendingProjectiles.push({
-            x: this.beaWorldX + (this.facingRight ? 25 : -25),
+            x: this.container.x,
             y: this.beaWorldY,
             facingRight: this.facingRight,
             config: {
@@ -504,10 +499,17 @@ export class Player {
   }
 
   private spawnAfterimage(): void {
-    const ghost = this.scene.add.rectangle(
-      this.container.x, this.container.y,
-      PLAYER.width, PLAYER.height, COLORS.andrewFill, 0.3
+    const frameIdx = parseInt(this.sprite.frame?.name ?? "0", 10);
+    const ghost = this.scene.add.sprite(
+      this.container.x,
+      this.container.y + PLAYER.height / 2 + this.jumpOffset,
+      AB_SHEET_KEY, frameIdx,
     );
+    ghost.setOrigin(0.5, 1.0);
+    ghost.setScale(AB_SPRITE_SCALE);
+    ghost.setFlipX(!this.facingRight);
+    ghost.setAlpha(0.3);
+    ghost.setTint(0x4488ff);
     ghost.setDepth(this.container.y - 1);
     this.scene.tweens.add({
       targets: ghost,
@@ -549,11 +551,9 @@ export class Player {
   private handleHitstun(dt: number): void {
     this.applyKnockback(dt);
 
-    const shake = (Math.random() - 0.5) * 4;
-    this.body.x = shake;
-    this.head.x = shake;
-    this.body.y = this.bodyBaseY;
-    this.head.y = this.headBaseY;
+    this.sprite.play("ab-hit", true);
+    this.sprite.x = (Math.random() - 0.5) * 4;
+    this.sprite.y = PLAYER.height / 2;
 
     if (this.combat.stateTimer >= PLAYER_HIT.hitstunDuration) {
       this.combat.toIdle();
@@ -566,24 +566,8 @@ export class Player {
     const totalDown = PLAYER_HIT.knockdownDuration + PLAYER_HIT.knockdownLieDuration;
     const t = this.combat.stateTimer;
 
-    if (t < PLAYER_HIT.knockdownDuration) {
-      const p = t / PLAYER_HIT.knockdownDuration;
-      this.body.y = this.bodyBaseY + p * 30;
-      this.body.scaleY = 1 - p * 0.6;
-      this.body.scaleX = 1 + p * 0.3;
-      this.head.y = this.headBaseY + p * 35;
-      this.head.scaleY = 1 - p * 0.4;
-      if (this.beaVisible) {
-        this.beaBody.y = -PLAYER.height / 2 - 28 + p * 40;
-        this.beaHead.y = -PLAYER.height / 2 - 46 + p * 45;
-      }
-    } else {
-      this.body.y = this.bodyBaseY + 30;
-      this.body.scaleY = 0.4;
-      this.body.scaleX = 1.3;
-      this.head.y = this.headBaseY + 35;
-      this.head.scaleY = 0.6;
-    }
+    this.sprite.play("ab-knockdown", true);
+    this.sprite.y = PLAYER.height / 2;
 
     if (t >= totalDown) {
       this.combat.enterRecovering();
@@ -596,20 +580,8 @@ export class Player {
     const flash = Math.sin(this.iFrameFlashTimer * 20) > 0;
     this.container.setAlpha(flash ? 1 : 0.3);
 
-    if (this.combat.stateTimer < 0.2) {
-      const p = this.combat.stateTimer / 0.2;
-      this.body.scaleY = Phaser.Math.Linear(0.4, 1, p);
-      this.body.scaleX = Phaser.Math.Linear(1.3, 1, p);
-      this.body.y = Phaser.Math.Linear(this.bodyBaseY + 30, this.bodyBaseY, p);
-      this.head.y = Phaser.Math.Linear(this.headBaseY + 35, this.headBaseY, p);
-      this.head.scaleY = Phaser.Math.Linear(0.6, 1, p);
-      if (this.beaVisible) {
-        this.beaBody.y = Phaser.Math.Linear(-PLAYER.height / 2 - 28 + 40, -PLAYER.height / 2 - 28, p);
-        this.beaHead.y = Phaser.Math.Linear(-PLAYER.height / 2 - 46 + 45, -PLAYER.height / 2 - 46, p);
-      }
-    } else {
-      this.resetPose();
-    }
+    this.sprite.play("ab-recovery", true);
+    this.sprite.y = PLAYER.height / 2;
 
     if (this.combat.stateTimer >= PLAYER_HIT.recoveryDuration) {
       this.combat.toIdle();
@@ -762,15 +734,13 @@ export class Player {
   }
 
   private applyUltimateVisual(): void {
-    const jOff = this.jumpOffset;
+    this.sprite.play("ab-cast", true);
+    this.sprite.y = PLAYER.height / 2 + this.jumpOffset;
+
     if (this.ultPhase === "setup") {
       const p = Math.min(this.combat.stateTimer / ULTIMATE.setupDuration, 1);
-      this.beaBody.y = Phaser.Math.Linear(-PLAYER.height / 2 - 28, PLAYER.height / 2 - 20, p) + jOff;
-      this.beaHead.y = Phaser.Math.Linear(-PLAYER.height / 2 - 46, PLAYER.height / 2 - 38, p) + jOff;
       const dir = this.facingRight ? 1 : -1;
-      this.beaBody.x = dir * p * 30; this.beaHead.x = dir * p * 30;
-      this.body.x = -dir * p * 15; this.head.x = -dir * p * 15;
-      this.head.y = this.headBaseY + p * 10 + jOff; this.body.y = this.bodyBaseY + jOff;
+      this.sprite.x = -dir * p * 10;
       if (p > 0.5 && !this.trashCan) {
         this.trashCan = this.scene.add.rectangle(
           this.container.x - dir * 35, this.container.y + 5, 30, 45, COLORS.trashCanFill
@@ -780,38 +750,22 @@ export class Player {
       }
     }
     if (this.ultPhase === "charge") {
-      const dir = this.facingRight ? 1 : -1;
-      this.beaBody.x = dir * 30; this.beaHead.x = dir * 30;
-      this.beaBody.y = PLAYER.height / 2 - 20 + jOff; this.beaHead.y = PLAYER.height / 2 - 38 + jOff;
-      const pulse = Math.sin(this.combat.stateTimer * 20) * 0.15;
-      this.beaBody.setScale(1 + pulse); this.beaHead.setScale(1 + pulse);
-      const glowColor = Math.random() > 0.5 ? COLORS.ultimateGlow : 0xffffff;
-      this.beaBody.setFillStyle(glowColor); this.beaHead.setFillStyle(glowColor);
-      this.body.x = -dir * 15; this.head.x = -dir * 15;
-      this.head.y = this.headBaseY + 15 + jOff; this.body.scaleY = 0.9;
+      const pulse = Math.sin(this.combat.stateTimer * 20) * 0.1;
+      this.sprite.setScale(AB_SPRITE_SCALE * (1 + pulse));
+      this.sprite.setTint(
+        Math.random() > 0.5 ? COLORS.ultimateGlow : 0xffffff
+      );
     }
     if (this.ultPhase === "blast") {
-      const dir = this.facingRight ? 1 : -1;
-      this.beaBody.setFillStyle(0xffffff); this.beaHead.setFillStyle(0xffffff);
-      this.beaBody.setScale(1.3); this.beaHead.setScale(1.3);
-      this.beaBody.x = dir * 30; this.beaHead.x = dir * 30;
-      this.body.x = -dir * 20; this.head.x = -dir * 20;
+      this.sprite.setScale(AB_SPRITE_SCALE * 1.15);
+      this.sprite.setTint(0xffffff);
     }
     if (this.ultPhase === "recovery") {
       const recStart = ULTIMATE.setupDuration + ULTIMATE.chargeDuration + ULTIMATE.blastDuration;
       const p = Math.min((this.combat.stateTimer - recStart) / ULTIMATE.recoveryDuration, 1);
-      this.beaBody.setFillStyle(COLORS.beaFill); this.beaHead.setFillStyle(COLORS.beaFill);
-      this.beaBody.setScale(1); this.beaHead.setScale(1);
-      const dir = this.facingRight ? 1 : -1;
-      this.beaBody.x = Phaser.Math.Linear(dir * 30, 0, p);
-      this.beaHead.x = Phaser.Math.Linear(dir * 30, 0, p);
-      this.beaBody.y = Phaser.Math.Linear(PLAYER.height / 2 - 20, -PLAYER.height / 2 - 28, p) + jOff;
-      this.beaHead.y = Phaser.Math.Linear(PLAYER.height / 2 - 38, -PLAYER.height / 2 - 46, p) + jOff;
-      this.body.x = Phaser.Math.Linear(-dir * 20, 0, p);
-      this.head.x = Phaser.Math.Linear(-dir * 20, 0, p);
-      this.head.y = Phaser.Math.Linear(this.headBaseY + 15, this.headBaseY, p) + jOff;
-      this.body.y = this.bodyBaseY + jOff;
-      this.body.scaleY = Phaser.Math.Linear(0.9, 1, p);
+      this.sprite.clearTint();
+      this.sprite.setScale(AB_SPRITE_SCALE);
+      this.sprite.x = Phaser.Math.Linear(this.sprite.x, 0, p);
       if (this.trashCan) {
         this.trashCan.setAlpha(1 - p);
         if (p >= 1) { this.trashCan.destroy(); this.trashCan = null; }
@@ -820,9 +774,8 @@ export class Player {
   }
 
   private endUltimate(): void {
-    this.beaBody.setFillStyle(COLORS.beaFill); this.beaHead.setFillStyle(COLORS.beaFill);
-    this.beaBody.setScale(1); this.beaHead.setScale(1);
-    this.body.scaleY = 1;
+    this.sprite.clearTint();
+    this.sprite.setScale(AB_SPRITE_SCALE);
     if (this.trashCan) { this.trashCan.destroy(); this.trashCan = null; }
     this.resetPose();
     this.combat.toIdle();
@@ -845,6 +798,7 @@ export class Player {
     const mpRatio = this.mp / this.stat("maxMp", ULTIMATE.maxMp);
     this.mpBarFill.scaleX = mpRatio;
     this.mpBarFill.x = -(MP_BAR_W * (1 - mpRatio)) / 2;
+    this.statusIconText.setText(this.activeStatuses.join(""));
   }
 
   // ── Rush ──
@@ -968,21 +922,24 @@ export class Player {
   private spawnProjectile(node: ComboNode): void {
     if (!node.projectile) return;
     this.pendingProjectiles.push({
-      x: this.beaWorldX + (this.facingRight ? 20 : -20), y: this.beaWorldY,
+      x: this.container.x, y: this.beaWorldY,
       facingRight: this.facingRight,
+      isHeavy: node.input === "H" || node.damage >= 20,
       config: { ...node.projectile, damage: node.damage, knockback: node.knockback, hitstopMs: node.hitstopMs, shakeIntensity: node.shakeIntensity, shakeDuration: node.shakeDuration },
     });
   }
 
   private spawnBurst(node: ComboNode): void {
     if (!node.projectile) return;
+    const heavy = node.input === "H" || node.damage >= 20;
     const count = node.burstCount ?? 3;
     for (let i = 0; i < count; i++) {
       this.scene.time.delayedCall(i * 60, () => {
         this.pendingProjectiles.push({
-          x: this.beaWorldX + (this.facingRight ? 20 : -20),
+          x: this.container.x,
           y: this.beaWorldY + (i - 1) * 8,
           facingRight: this.facingRight,
+          isHeavy: heavy,
           config: { ...node.projectile!, damage: node.damage, knockback: node.knockback, hitstopMs: node.hitstopMs, shakeIntensity: node.shakeIntensity, shakeDuration: node.shakeDuration },
         });
       });
@@ -993,15 +950,14 @@ export class Player {
     this.setBeaVisible(false);
     this.pendingProjectiles.push({
       x: this.beaWorldX, y: this.beaWorldY, facingRight: this.facingRight,
+      isHeavy: node.input === "H" || node.damage >= 20,
       config: { radius: 12, speed: 550, color: COLORS.beaFill, maxRange: 300, damage: node.damage, knockback: node.knockback, hitstopMs: node.hitstopMs, shakeIntensity: node.shakeIntensity, shakeDuration: node.shakeDuration },
     });
     this.scene.time.delayedCall(500, () => this.setBeaVisible(true));
   }
 
-  private setBeaVisible(visible: boolean): void {
-    this.beaVisible = visible;
-    this.beaBody.setAlpha(visible ? 1 : 0);
-    this.beaHead.setAlpha(visible ? 1 : 0);
+  private setBeaVisible(_visible: boolean): void {
+    // Bea is baked into sprite frames; visibility toggle is a no-op
   }
 
   private onAttackEnd(): void {
@@ -1060,170 +1016,51 @@ export class Player {
 
   private applyVisualState(): void {
     const s = this.combat;
-    const jOff = this.jumpOffset;
-    this.body.y = this.bodyBaseY + jOff;
-    this.head.y = this.headBaseY + jOff;
-    if (this.beaVisible) {
-      this.beaBody.y = -PLAYER.height / 2 - 28 + jOff;
-      this.beaHead.y = -PLAYER.height / 2 - 46 + jOff;
-    }
-    this.nameTag.y = -PLAYER.height / 2 - 62 + jOff;
-    this.shadow.scaleX = 1 - Math.abs(jOff) / 300;
-    this.shadow.scaleY = 1 - Math.abs(jOff) / 300;
+    this.sprite.y = PLAYER.height / 2 + this.jumpOffset;
+    this.shadow.scaleX = 1 - Math.abs(this.jumpOffset) / 300;
+    this.shadow.scaleY = 1 - Math.abs(this.jumpOffset) / 300;
+    this.nameTag.y = -PLAYER.height / 2 - 62 + this.jumpOffset;
 
-    if (s.isAirAttacking) this.applyAirAttackPose();
-    else if (s.isThrowing) this.applyThrowPose();
-    else if (s.isBlocking) this.applyBlockPose();
-    else if (s.isDashAttacking) this.applyDashAttackPose();
-    else if (s.isDashing) this.applyDashPose();
-    else if (s.isAttacking && s.currentNode) this.applyAttackPose(s.stateTimer / s.currentNode.duration, s.currentNode.visual);
-    else this.resetPose();
-  }
-
-  private applyAirAttackPose(): void {
-    const jOff = this.jumpOffset;
-    this.body.y = this.bodyBaseY + jOff; this.body.scaleX = 1.2; this.body.scaleY = 0.8;
-    this.head.y = this.headBaseY + 5 + jOff; this.head.x = 0;
-    if (this.beaVisible) {
-      this.beaBody.x = 0; this.beaHead.x = 0;
-      this.beaBody.y = this.bodyBaseY - 10 + jOff;
-      this.beaHead.y = this.bodyBaseY - 26 + jOff;
-    }
-  }
-
-  private applyThrowPose(): void {
-    const jOff = this.jumpOffset;
-    if (this.throwPhase === "grab") {
-      const p = Math.min(this.combat.stateTimer / THROW.grabDuration, 1);
-      this.body.scaleX = 1 + p * 0.1;
-      this.body.y = this.bodyBaseY + jOff; this.head.y = this.headBaseY + jOff;
+    if (s.isAirAttacking) {
+      this.sprite.play("ab-punch", true);
+    } else if (s.isThrowing) {
+      this.sprite.play("ab-punch", true);
+    } else if (s.isBlocking) {
+      this.sprite.play("ab-idle", true);
+      this.sprite.setScale(AB_SPRITE_SCALE * 1.05, AB_SPRITE_SCALE * 0.95);
+      return;
+    } else if (s.isDashAttacking) {
+      this.sprite.play("ab-punch", true);
+    } else if (s.isDashing) {
+      this.sprite.play("ab-run", true);
+    } else if (s.isAttacking && s.currentNode) {
+      const v = s.currentNode.visual;
+      if (v.startsWith("bea-")) {
+        this.sprite.play("ab-cast", true);
+      } else {
+        this.sprite.play("ab-punch", true);
+      }
+    } else if (s.state === "walk") {
+      this.sprite.play("ab-walk", true);
     } else {
-      const p = Math.min(this.combat.stateTimer / THROW.throwDuration, 1);
-      const swing = Math.sin(p * Math.PI);
-      this.body.scaleX = 1 + swing * 0.15; this.body.scaleY = 1 - swing * 0.1;
-      this.head.x = swing * 10;
-      this.body.y = this.bodyBaseY + jOff; this.head.y = this.headBaseY + jOff;
+      this.sprite.play("ab-idle", true);
     }
-  }
-
-  private applyBlockPose(): void {
-    const jOff = this.jumpOffset;
-    this.body.y = this.bodyBaseY + 6 + jOff; this.body.scaleX = 1.15; this.body.scaleY = 0.88;
-    this.head.y = this.headBaseY + 8 + jOff; this.head.x = 0;
-    if (this.beaVisible) {
-      this.beaBody.y = -PLAYER.height / 2 - 22 + jOff;
-      this.beaHead.y = -PLAYER.height / 2 - 38 + jOff;
-      this.beaBody.x = 0; this.beaHead.x = 0;
-    }
-  }
-
-  private applyDashPose(): void {
-    this.body.scaleX = 1.3; this.body.scaleY = 0.85;
-    this.head.x = this.dashDir * 6;
-  }
-
-  private applyDashAttackPose(): void {
-    const p = Math.min(this.combat.stateTimer / DASH.attackDuration, 1);
-    const swing = Math.sin(p * Math.PI);
-    if (this.dashAttackType === "heavy") {
-      this.body.scaleX = 1.2 + swing * 0.15;
-      this.body.scaleY = 1 - swing * 0.15;
-      this.head.x = this.dashDir * swing * 12;
-      this.head.y = this.headBaseY - swing * 4;
-    } else {
-      const beaLean = swing * 18;
-      this.beaBody.x = beaLean * 0.7;
-      this.beaHead.x = beaLean * 0.9;
-      this.beaBody.rotation = swing * 0.25;
-      this.beaHead.rotation = swing * 0.2;
-      this.body.scaleX = 1.1;
-    }
-  }
-
-  private applyAttackPose(progress: number, visual: VisualPose): void {
-    const jOff = this.jumpOffset;
-    const swing = Math.sin(progress * Math.PI);
-    switch (visual) {
-      case "andrew-punch": {
-        const lunge = swing * 12;
-        this.body.scaleX = 1 + swing * 0.12; this.body.scaleY = 1 - swing * 0.15;
-        this.head.x = lunge * 0.5; this.head.y = this.headBaseY - lunge * 0.3 + jOff;
-        break;
-      }
-      case "andrew-slam": {
-        const rise = progress < 0.5 ? swing * 16 : 0;
-        const slam = progress >= 0.5 ? (progress - 0.5) * 2 : 0;
-        this.body.scaleY = 1 - slam * 0.25; this.body.scaleX = 1 + slam * 0.15;
-        this.head.y = this.headBaseY - rise + jOff; this.body.y = this.bodyBaseY + slam * 6 + jOff;
-        break;
-      }
-      case "andrew-rush": {
-        this.body.scaleX = 1 + swing * 0.18; this.body.scaleY = 1 - swing * 0.1;
-        this.head.x = swing * 8; this.head.y = this.headBaseY + swing * 3 + jOff;
-        break;
-      }
-      case "andrew-uppercut": {
-        const rise = swing * 10;
-        this.body.y = this.bodyBaseY - rise + jOff; this.head.y = this.headBaseY - rise * 1.4 + jOff;
-        this.head.x = swing * 4;
-        break;
-      }
-      case "bea-cast": {
-        const beaLean = swing * 14;
-        this.beaBody.x = beaLean * 0.6; this.beaHead.x = beaLean * 0.8;
-        this.beaBody.rotation = swing * 0.2; this.beaHead.rotation = swing * 0.15;
-        this.body.scaleY = 1 - swing * 0.04;
-        break;
-      }
-      case "bea-big-cast": {
-        const beaLean = swing * 18;
-        this.beaBody.x = beaLean * 0.4; this.beaHead.x = beaLean * 0.6;
-        this.beaBody.y = -PLAYER.height / 2 - 28 - swing * 6 + jOff;
-        this.beaHead.y = -PLAYER.height / 2 - 46 - swing * 8 + jOff;
-        this.beaBody.rotation = swing * 0.25; this.beaHead.rotation = swing * 0.2;
-        this.body.scaleY = 1 - swing * 0.06;
-        break;
-      }
-      case "bea-burst": {
-        const bob = Math.sin(progress * Math.PI * 6) * 3;
-        this.beaBody.x = swing * 10; this.beaHead.x = swing * 12;
-        this.beaHead.y = -PLAYER.height / 2 - 46 + bob + jOff;
-        this.beaBody.rotation = swing * 0.15;
-        break;
-      }
-      case "bea-finisher": {
-        this.beaBody.x = swing * 6; this.beaHead.x = swing * 8;
-        this.beaBody.setAlpha(1 + swing * 0.5); this.beaHead.setAlpha(1 + swing * 0.5);
-        this.beaBody.rotation = swing * 0.3; this.beaHead.rotation = swing * 0.25;
-        break;
-      }
-      case "bea-toss": {
-        this.body.scaleX = 1 + swing * 0.08; this.head.x = swing * 6;
-        break;
-      }
-    }
+    this.sprite.setScale(AB_SPRITE_SCALE);
   }
 
   private applyHitstopVisual(): void {
-    const shake = (Math.random() - 0.5) * 3;
-    this.body.x = shake; this.head.x = shake;
-    if (this.beaVisible) { this.beaBody.x = shake; this.beaHead.x = shake; }
+    this.sprite.x = (Math.random() - 0.5) * 3;
   }
 
   private resetPose(): void {
-    this.body.y = this.bodyBaseY + this.jumpOffset;
-    this.body.scaleX = 1; this.body.scaleY = 1; this.body.x = 0;
-    this.head.y = this.headBaseY + this.jumpOffset; this.head.x = 0;
-    this.head.scaleY = 1;
-    this.beaBody.x = 0; this.beaHead.x = 0;
-    this.beaBody.rotation = 0; this.beaHead.rotation = 0;
-    if (this.beaVisible) { this.beaBody.setAlpha(1); this.beaHead.setAlpha(1); }
+    this.sprite.y = PLAYER.height / 2 + this.jumpOffset;
+    this.sprite.setScale(AB_SPRITE_SCALE);
+    this.sprite.x = 0;
+    this.sprite.clearTint();
   }
 
   private clampToBounds(): void {
-    const pad = ARENA.boundaryPadding;
-    const halfW = PLAYER.width / 2;
-    this.container.x = Phaser.Math.Clamp(this.container.x, pad + halfW, ARENA.width - pad - halfW);
-    this.container.y = Phaser.Math.Clamp(this.container.y, ARENA.groundY, ARENA.groundY + ARENA.groundHeight - pad);
+    this.container.x = Phaser.Math.Clamp(this.container.x, this.boundsMinX, this.boundsMaxX);
+    this.container.y = Phaser.Math.Clamp(this.container.y, ARENA.groundY, ARENA.groundY + ARENA.groundHeight - ARENA.boundaryPadding);
   }
 }
