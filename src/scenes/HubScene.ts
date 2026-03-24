@@ -301,8 +301,10 @@ export class HubScene extends Phaser.Scene {
   }
 
   private updateCharacterPanel(): void {
-    if (this.inputMgr.justPressed(Action.LEFT) || this.inputMgr.justPressed(Action.RIGHT)) {
-      const dir = this.inputMgr.justPressed(Action.RIGHT) ? 1 : -1;
+    const pressedLeft = this.inputMgr.justPressed(Action.LEFT);
+    const pressedRight = this.inputMgr.justPressed(Action.RIGHT);
+    if (pressedLeft || pressedRight) {
+      const dir = pressedRight ? 1 : -1;
       this.charIndex = Phaser.Math.Clamp(this.charIndex + dir, 0, CHARACTERS.length - 1);
       this.showPanel();
     }
@@ -313,6 +315,10 @@ export class HubScene extends Phaser.Scene {
         this.panel = "mode";
         this.showPanel();
       }
+    }
+    if (this.inputMgr.justPressed(Action.PAUSE)) {
+      this.scene.pause();
+      this.scene.launch("SettingsScene", { callerKey: "HubScene" });
     }
   }
 
@@ -472,8 +478,10 @@ export class HubScene extends Phaser.Scene {
       this.selectedRow = this.selectedRow === 0 ? 1 : 0;
       this.showPanel();
     }
-    if (this.inputMgr.justPressed(Action.LEFT) || this.inputMgr.justPressed(Action.RIGHT)) {
-      const dir = this.inputMgr.justPressed(Action.RIGHT) ? 1 : -1;
+    const cfgLeft = this.inputMgr.justPressed(Action.LEFT);
+    const cfgRight = this.inputMgr.justPressed(Action.RIGHT);
+    if (cfgLeft || cfgRight) {
+      const dir = cfgRight ? 1 : -1;
       if (this.selectedRow === 0) {
         this.enemyCount = Phaser.Math.Clamp(this.enemyCount + dir, 1, 5);
       } else {

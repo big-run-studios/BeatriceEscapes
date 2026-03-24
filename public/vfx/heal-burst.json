@@ -1,0 +1,17 @@
+{
+  "name": "heal-burst",
+  "description": "Green healing sparkle effect for heal boons",
+  "emitters": [
+    {
+      "lifespan": 500,
+      "speed": { "min": 20, "max": 60 },
+      "angle": { "min": 240, "max": 300 },
+      "scale": { "start": 0.1, "end": 0 },
+      "alpha": { "start": 0.9, "end": 0 },
+      "gravityY": -40,
+      "blendMode": "ADD",
+      "quantity": 5,
+      "tint": "0x44ff88"
+    }
+  ]
+}

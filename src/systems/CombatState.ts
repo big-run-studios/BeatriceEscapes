@@ -1,5 +1,7 @@
 import { ComboNode, ComboInput, COMBO_TREE } from "../config/game";
 
+export type AttackPhase = "anticipation" | "contact" | "recovery";
+
 export type PlayerState =
   | "idle" | "walk" | "attacking" | "jump" | "airAttack"
   | "throwing" | "ultimate" | "blocking" | "dashing" | "dashAttack"
@@ -15,6 +17,9 @@ export class CombatStateMachine {
   private hitstopRemaining = 0;
   private preHitstopState: PlayerState = "idle";
   private preHitstopNode: ComboNode | null = null;
+
+  /** Current attack phase within the combo node (anticipation/contact/recovery pattern). */
+  attackPhase: AttackPhase = "anticipation";
 
   get isAttacking(): boolean { return this.state === "attacking"; }
   get inHitstop(): boolean { return this.state === "hitstop"; }
@@ -32,6 +37,20 @@ export class CombatStateMachine {
   get isParrying(): boolean { return this.state === "parrying"; }
   get isParryRecovery(): boolean { return this.state === "parryRecovery"; }
   get isGuarding(): boolean { return this.state === "guarding"; }
+
+  get isInContactPhase(): boolean {
+    if (!this.isAttacking || !this.currentNode) return false;
+    const phases = this.currentNode.phases;
+    if (!phases) return this.stateTimer >= this.currentNode.hitFrame;
+    return this.attackPhase === "contact";
+  }
+
+  get isInRecoveryPhase(): boolean {
+    if (!this.isAttacking || !this.currentNode) return false;
+    const phases = this.currentNode.phases;
+    if (!phases) return this.stateTimer >= this.currentNode.hitFrame + 0.05;
+    return this.attackPhase === "recovery";
+  }
 
   get isBusy(): boolean {
     return this.isAttacking || this.inHitstop || this.isJumping
@@ -56,6 +75,17 @@ export class CombatStateMachine {
       return;
     }
     this.stateTimer += dt;
+
+    if (this.isAttacking && this.currentNode?.phases) {
+      const p = this.currentNode.phases;
+      if (this.stateTimer < p.anticipation) {
+        this.attackPhase = "anticipation";
+      } else if (this.stateTimer < p.anticipation + p.contact) {
+        this.attackPhase = "contact";
+      } else {
+        this.attackPhase = "recovery";
+      }
+    }
   }
 
   bufferInput(input: ComboInput): void {
@@ -124,5 +154,6 @@ export class CombatStateMachine {
     this.hasHitThisSwing = false;
     this.currentNode = node;
     this.bufferedInput = null;
+    this.attackPhase = "anticipation";
   }
 }

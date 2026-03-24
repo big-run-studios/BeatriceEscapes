@@ -6,7 +6,7 @@ import { RunState, MapNode } from "../systems/RunState";
 import { BoonDef, ALL_BOON_ICON_IDS, RARITY_COLORS, SLOT_LABELS } from "../data/boons";
 import { AudioManager } from "../systems/AudioManager";
 
-type Phase = "boon_reward" | "boon_choice" | "door_choice" | "zone_complete" | "shop";
+type Phase = "boon_reward" | "boon_choice" | "door_choice" | "zone_complete" | "shop" | "rest";
 
 export class RoomMapScene extends Phaser.Scene {
   private inputMgr!: InputManager;
@@ -18,6 +18,7 @@ export class RoomMapScene extends Phaser.Scene {
   private doorChoices: MapNode[] = [];
   private uiObjects: Phaser.GameObjects.GameObject[] = [];
   private inputGrace = 0;
+  private restTimer: Phaser.Time.TimerEvent | null = null;
   private rewardBoon: BoonDef | null = null;
 
   constructor() {
@@ -139,12 +140,20 @@ export class RoomMapScene extends Phaser.Scene {
       return;
     }
 
+    if (this.inputMgr.justPressed(Action.PAUSE)) {
+      this.scene.pause();
+      this.scene.launch("SettingsScene", { callerKey: "RoomMapScene" });
+      this.inputMgr.postUpdate();
+      return;
+    }
+
     switch (this.phase) {
       case "boon_reward": this.updateBoonReward(); break;
       case "boon_choice": this.updateBoonChoice(); break;
       case "door_choice": this.updateDoorChoice(); break;
       case "shop": this.updateShop(); break;
       case "zone_complete": this.updateZoneComplete(); break;
+      case "rest": this.updateRestStop(); break;
     }
     this.inputMgr.postUpdate();
   }
@@ -1050,7 +1059,21 @@ export class RoomMapScene extends Phaser.Scene {
     this.uiObjects.push(flavor);
 
     this.runState.markNodeVisited();
-    this.time.delayedCall(1500, () => this.enterDoorChoice());
+    this.phase = "rest";
+    this.restTimer = this.time.delayedCall(1500, () => {
+      this.restTimer = null;
+      this.enterDoorChoice();
+    });
+  }
+
+  private updateRestStop(): void {
+    if (this.inputMgr.justPressed(Action.CONFIRM)) {
+      if (this.restTimer) {
+        this.restTimer.destroy();
+        this.restTimer = null;
+      }
+      this.enterDoorChoice();
+    }
   }
 
   // ── Shop Stop ──

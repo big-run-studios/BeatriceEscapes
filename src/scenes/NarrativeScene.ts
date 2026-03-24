@@ -632,8 +632,16 @@ export class NarrativeScene extends Phaser.Scene {
     }
 
     if (this.tts.isReady) {
-      if (this.inputMgr.justPressed(Action.HEAVY)) {
+      if (this.inputMgr.justPressed(Action.ATTACK)) {
         this.tts.togglePlayPause(this.activeEntry.body, this.activeEntry.id);
+      }
+      if (this.inputMgr.justPressed(Action.RIGHT)) {
+        this.tts.cycleVoice(1);
+        this.buildDetailView();
+      }
+      if (this.inputMgr.justPressed(Action.LEFT)) {
+        this.tts.cycleVoice(-1);
+        this.buildDetailView();
       }
     }
 

@@ -61,6 +61,8 @@ const KEY_DISPLAY_LABELS: Record<string, string> = {
   DOWN: "Down",
   LEFT: "Left",
   RIGHT: "Right",
+  G: "G",
+  H: "H",
 };
 
 const DEFAULT_GAMEPAD_MAP: ButtonMapping[] = [
@@ -94,8 +96,11 @@ const DEFAULT_KEYBOARD_MAP: KeyMapping[] = [
   { action: Action.HEAVY, key: "K" },
   { action: Action.SPECIAL, key: "L" },
   { action: Action.JUMP, key: "SPACE" },
+  { action: Action.CONFIRM, key: "SPACE" },
   { action: Action.THROW, key: "F" },
   { action: Action.DODGE, key: "I" },
+  { action: Action.BLOCK, key: "G" },
+  { action: Action.UTILITY, key: "H" },
   { action: Action.CONFIRM, key: "ENTER" },
   { action: Action.BACK, key: "ESC" },
   { action: Action.PAUSE, key: "ESC" },

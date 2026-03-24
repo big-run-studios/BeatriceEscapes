@@ -286,11 +286,14 @@ export class TitleScene extends Phaser.Scene {
         if (!this.accepted) audio.playMusic("title");
       });
       this.input.off("pointerdown", startTitleMusic);
+      document.removeEventListener("keydown", keyUnlock);
     };
+    const keyUnlock = () => startTitleMusic();
     if (audio.context.state === "running") {
       audio.playMusic("title");
     } else {
       this.input.on("pointerdown", startTitleMusic);
+      document.addEventListener("keydown", keyUnlock, { once: true });
     }
   }
 
@@ -335,6 +338,14 @@ export class TitleScene extends Phaser.Scene {
         this.usingMouse = false;
         this.cursorX += lx * CURSOR_SPEED * (delta / 1000);
         this.cursorY += ly * CURSOR_SPEED * (delta / 1000);
+      }
+    }
+
+    if (!this.usingMouse && !pad) {
+      const move = this.input_mgr.getMovement();
+      if (move.x !== 0 || move.y !== 0) {
+        this.cursorX += move.x * CURSOR_SPEED * (delta / 1000);
+        this.cursorY += move.y * CURSOR_SPEED * (delta / 1000);
       }
     }
 
@@ -392,10 +403,13 @@ export class TitleScene extends Phaser.Scene {
     }
 
     if (this.ready && !this.accepted) {
-      if (this.input_mgr.justPressed(Action.CONFIRM) || this.input_mgr.justPressed(Action.PAUSE)) {
+      if (this.input_mgr.justPressed(Action.CONFIRM)) {
         this.accepted = true;
         AudioManager.instance.resumeContext();
         this.onStart();
+      } else if (this.input_mgr.justPressed(Action.PAUSE)) {
+        this.scene.pause();
+        this.scene.launch("SettingsScene", { callerKey: "TitleScene" });
       }
     }
 

@@ -1,0 +1,17 @@
+{
+  "name": "hit-spark",
+  "description": "Melee impact spark burst for combat hits",
+  "emitters": [
+    {
+      "lifespan": 250,
+      "speed": { "min": 80, "max": 200 },
+      "angle": { "min": 0, "max": 360 },
+      "scale": { "start": 0.15, "end": 0 },
+      "alpha": { "start": 1, "end": 0 },
+      "rotate": { "min": 0, "max": 360 },
+      "blendMode": "ADD",
+      "quantity": 6,
+      "tint": "0xffee44"
+    }
+  ]
+}

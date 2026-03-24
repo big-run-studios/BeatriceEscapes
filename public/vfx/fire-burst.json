@@ -1,0 +1,28 @@
+{
+  "name": "fire-burst",
+  "description": "Fire explosion effect for fire-based attacks",
+  "emitters": [
+    {
+      "lifespan": 350,
+      "speed": { "min": 30, "max": 80 },
+      "angle": { "min": 0, "max": 360 },
+      "scale": { "start": 0.15, "end": 0 },
+      "alpha": { "start": 0.9, "end": 0 },
+      "rotate": { "min": 0, "max": 360 },
+      "blendMode": "ADD",
+      "quantity": 6,
+      "tint": "0xff6622"
+    },
+    {
+      "lifespan": 500,
+      "speed": { "min": 5, "max": 20 },
+      "angle": { "min": 240, "max": 300 },
+      "scale": { "start": 0.06, "end": 0.15 },
+      "alpha": { "start": 0.4, "end": 0 },
+      "gravityY": -20,
+      "blendMode": "NORMAL",
+      "quantity": 3,
+      "tint": "0x444444"
+    }
+  ]
+}

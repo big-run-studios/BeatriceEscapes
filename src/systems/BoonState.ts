@@ -3,6 +3,12 @@ import {
   EventContext, ALL_BOON_POOLS, RARITY_WEIGHTS, scaleDamage,
 } from "../data/boons";
 
+/**
+ * Hook function type for composable boon effects.
+ * Pattern from SpiritChainRoguelite's weapon hook arrays.
+ */
+export type BoonHookFn = (ctx: EventContext) => BoonAction | null;
+
 export interface SlottedBoon {
   boon: BoonDef;
   level: number;
@@ -38,6 +44,23 @@ export class BoonState {
   private cooldowns = new Map<string, number>();
   private _speedBurst = 0;
   private _speedMultiplier = 1;
+
+  /**
+   * Composable hook arrays keyed by trigger type.
+   * Boons push functions here; fireEvent iterates them.
+   * Pattern from SpiritChainRoguelite's onHit/onHoldStart arrays.
+   */
+  private readonly hooks = new Map<BoonTrigger, { fn: BoonHookFn; boonId: string; cooldownKey: string; cooldown?: number }[]>();
+
+  registerHook(trigger: BoonTrigger, boonId: string, cooldown: number | undefined, fn: BoonHookFn): void {
+    if (!this.hooks.has(trigger)) this.hooks.set(trigger, []);
+    const cdKey = `hook:${boonId}:${trigger}`;
+    this.hooks.get(trigger)!.push({ fn, boonId, cooldownKey: cdKey, cooldown });
+  }
+
+  clearHooks(): void {
+    this.hooks.clear();
+  }
 
   get activeBoons(): BoonDef[] {
     const result: BoonDef[] = [];
@@ -159,7 +182,7 @@ export class BoonState {
     return parts.join(", ");
   }
 
-  fireEvent(trigger: BoonTrigger, _ctx: EventContext): BoonAction[] {
+  fireEvent(trigger: BoonTrigger, ctx: EventContext): BoonAction[] {
     const actions: BoonAction[] = [];
 
     for (const sb of this.slots.values()) {
@@ -175,6 +198,18 @@ export class BoonState {
         }
 
         actions.push(scaleAction(effect.action, sb.level));
+      }
+    }
+
+    const hookList = this.hooks.get(trigger);
+    if (hookList) {
+      for (const hook of hookList) {
+        if (hook.cooldown && (this.cooldowns.get(hook.cooldownKey) ?? 0) > 0) continue;
+        const result = hook.fn(ctx);
+        if (result) {
+          if (hook.cooldown) this.cooldowns.set(hook.cooldownKey, hook.cooldown);
+          actions.push(result);
+        }
       }
     }
 
@@ -209,8 +244,16 @@ export class BoonState {
       if (boons) pool.push(...boons);
     }
 
+    const ownedIds = new Set<string>();
+    for (const sb of this.slots.values()) ownedIds.add(sb.boon.id);
+    for (const b of this.passiveBoons) ownedIds.add(b.id);
+
     const ownedPassiveIds = new Set(this.passiveBoons.map((b) => b.id));
     let available = pool.filter((b) => {
+      if (b.prerequisites?.length) {
+        const met = b.prerequisites.every((pid) => ownedIds.has(pid));
+        if (!met) return false;
+      }
       if (b.slot) return true;
       return b.stackable || !ownedPassiveIds.has(b.id);
     });

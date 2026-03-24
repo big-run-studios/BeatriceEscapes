@@ -4,6 +4,9 @@ import {
   EnemyTypeDef, EnemyTypeId, ENEMY_TYPES,
 } from "../config/game";
 import { VFXManager } from "../systems/VFXManager";
+import { getEnemySpriteScale, getEnemySheetKey, getEnemyAnimPrefix } from "./EnemyAnims";
+import type { AIPatternContext, AIPatternResult, AIPatternFn } from "./ai/types";
+import { getAIPattern } from "./ai";
 
 export type EnemyRole = "engage" | "flank" | "circle" | "evade" | "retreat";
 
@@ -75,6 +78,10 @@ export class Enemy {
   private shoulderR?: Phaser.GameObjects.Rectangle;
   private antenna?: Phaser.GameObjects.Rectangle;
   private megaphone?: Phaser.GameObjects.Rectangle;
+  private sprite?: Phaser.GameObjects.Sprite;
+  private animPrefix: string | null = null;
+  private useSprite = false;
+  private prevAnimKey = "";
   private scene: Phaser.Scene;
 
   private aiState: EnemyAIState = "idle";
@@ -246,6 +253,25 @@ export class Enemy {
     });
     children.push(this.hpBarBg, this.hpBarDamage, this.hpBarPoison, this.hpBarFill, this.statusIconText);
 
+    const sheetKey = getEnemySheetKey(td.id);
+    this.animPrefix = getEnemyAnimPrefix(td.id);
+    if (sheetKey && this.animPrefix) {
+      const spriteScale = getEnemySpriteScale(td.id);
+      this.sprite = scene.add.sprite(0, 0, sheetKey, 0);
+      this.sprite.setOrigin(0.5, 0.7);
+      this.sprite.setScale(spriteScale);
+      children.push(this.sprite);
+      this.useSprite = true;
+
+      this.body.setAlpha(0);
+      this.head.setAlpha(0);
+      this.visor.setAlpha(0);
+      if (this.shoulderL) this.shoulderL.setAlpha(0);
+      if (this.shoulderR) this.shoulderR.setAlpha(0);
+      if (this.antenna) this.antenna.setAlpha(0);
+      if (this.megaphone) this.megaphone.setAlpha(0);
+    }
+
     this.container = scene.add.container(x, y, children);
     this.stateTimer = Math.random() * 0.5;
 
@@ -260,6 +286,46 @@ export class Enemy {
   get width(): number { return this.typeDef.width; }
   get height(): number { return this.typeDef.height; }
   get isDead(): boolean { return this.aiState === "dead"; }
+
+  /**
+   * Build a context object for AI pattern modules.
+   * Pattern modules receive this and return movement intent.
+   */
+  buildPatternContext(dt: number): AIPatternContext {
+    return {
+      enemyX: this.container.x,
+      enemyY: this.container.y,
+      playerX: this.intent.x,
+      playerY: this.intent.y,
+      playerFacingRight: this.intent.facingRight,
+      speed: this.speed,
+      dt,
+      facingRight: this.facingRight,
+      flankOffset: this.aiFlankOffset,
+      flankAccuracy: this.aiFlankAccuracy,
+      flankWideArc: this.aiFlankWideArc,
+      circleRadius: this.aiCircleRadius,
+      circleAngle: this.circleAngle,
+      circleSpeed: this.aiCircleSpeed,
+      evadeDir: this.evadeDir,
+      evadeSpeed: this.aiEvadeSpeed,
+      retreatDist: this.aiRetreatDist,
+    };
+  }
+
+  /**
+   * Apply the result of an AI pattern module to this enemy's position.
+   */
+  applyPatternResult(result: AIPatternResult): void {
+    this.container.x += result.vx;
+    this.container.y += result.vy;
+    this.facingRight = result.facingRight;
+    this.container.scaleX = this.facingRight ? 1 : -1;
+    if (result.newCircleAngle !== undefined) {
+      this.circleAngle = result.newCircleAngle;
+    }
+    this.clampPosition();
+  }
   get typeId(): EnemyTypeId { return this.typeDef.id; }
 
   setPlayerIntent(intent: PlayerIntent): void { this.intent = intent; }
@@ -318,10 +384,17 @@ export class Enemy {
         this.hp -= this.poisonDmg;
         this.damageBarTarget = this.hp / this.maxHp;
         this.scene.events.emit("poison-damage", this.container.x, this.container.y - this.height / 2, this.poisonDmg);
-        this.body.setFillStyle(this.poisonColor);
-        this.scene.time.delayedCall(100, () => {
-          if (this.alive) this.body.setFillStyle(this.typeDef.bodyColor);
-        });
+        if (this.useSprite && this.sprite) {
+          this.sprite.setTint(this.poisonColor);
+          this.scene.time.delayedCall(100, () => {
+            if (this.alive && this.sprite) this.sprite.clearTint();
+          });
+        } else {
+          this.body.setFillStyle(this.poisonColor);
+          this.scene.time.delayedCall(100, () => {
+            if (this.alive) this.body.setFillStyle(this.typeDef.bodyColor);
+          });
+        }
         if (this.hp <= 0) {
           this.hp = 0;
           this.die();
@@ -366,8 +439,12 @@ export class Enemy {
         this.applyHitstunVisual();
         if (this.stateTimer >= ENEMY.hitstunDuration) {
           this.enterState("assess");
-          this.body.x = 0;
-          this.head.x = 0;
+          if (this.useSprite && this.sprite) {
+            this.sprite.x = 0;
+          } else {
+            this.body.x = 0;
+            this.head.x = 0;
+          }
         }
         break;
       case "charge_windup":
@@ -401,8 +478,75 @@ export class Enemy {
 
     this.applyAllySpacing();
     this.updateHpBar(dt);
-    this.updateVisualCues();
+    if (this.useSprite) {
+      this.updateSpriteAnim();
+    } else {
+      this.updateVisualCues();
+    }
     this.container.setDepth(this.container.y);
+  }
+
+  private updateSpriteAnim(): void {
+    if (!this.sprite || !this.animPrefix) return;
+    const p = this.animPrefix;
+
+    let targetAnim: string;
+    switch (this.aiState) {
+      case "idle":
+        targetAnim = `${p}-idle`;
+        break;
+      case "assess":
+        targetAnim = `${p}-assess`;
+        break;
+      case "chase":
+        targetAnim = `${p}-chase`;
+        break;
+      case "flank":
+        targetAnim = `${p}-flank`;
+        break;
+      case "circle":
+      case "retreat":
+        targetAnim = `${p}-walk`;
+        break;
+      case "evade":
+        targetAnim = `${p}-dash`;
+        break;
+      case "windup":
+      case "charge_windup":
+      case "ranged_windup":
+      case "megaphone_windup":
+      case "net_windup":
+        targetAnim = `${p}-windup`;
+        break;
+      case "attack":
+      case "charging":
+      case "ranged_fire":
+      case "megaphone_blast":
+      case "net_throw":
+        targetAnim = `${p}-attack`;
+        break;
+      case "recover":
+        targetAnim = `${p}-recover`;
+        break;
+      case "hitstun":
+        targetAnim = `${p}-hit`;
+        break;
+      case "dead":
+        targetAnim = `${p}-death`;
+        break;
+      case "boss_transition":
+        targetAnim = `${p}-alert`;
+        break;
+      default:
+        targetAnim = `${p}-idle`;
+    }
+
+    if (targetAnim !== this.prevAnimKey) {
+      this.prevAnimKey = targetAnim;
+      this.sprite.play(targetAnim, true);
+    }
+
+    this.container.scaleX = this.facingRight ? 1 : -1;
   }
 
   // ── AI Decision ──
@@ -650,7 +794,12 @@ export class Enemy {
     const dx = this.intent.x - this.container.x;
     const backDir = dx > 0 ? -1 : 1;
     this.container.x += backDir * this.aiEvadeSpeed * 0.5 * dt;
-    this.body.x = Math.sin(this.stateTimer * 30) * 3;
+    const shake = Math.sin(this.stateTimer * 30) * 3;
+    if (this.useSprite && this.sprite) {
+      this.sprite.x = shake;
+    } else {
+      this.body.x = shake;
+    }
     this.clampToBounds();
   }
 
@@ -683,33 +832,47 @@ export class Enemy {
   // ── Standard melee combat ──
 
   private doWindup(): void {
-    const td = this.typeDef;
-    const flash = Math.sin(this.stateTimer * 20) > 0;
-    this.body.setFillStyle(flash ? COLORS.enemyWindup : td.bodyColor);
-    this.visor.setFillStyle(flash ? 0xffffff : td.visorColor);
-
-    if (this.stateTimer >= this.aiWindupDur) {
-      this.body.setFillStyle(td.bodyColor);
-      this.visor.setFillStyle(td.visorColor);
-      this.enterState("attack");
+    if (this.useSprite && this.sprite) {
+      const flash = Math.sin(this.stateTimer * 20) > 0;
+      if (flash) this.sprite.setTint(0xffaaaa);
+      else this.sprite.clearTint();
+      if (this.stateTimer >= this.aiWindupDur) {
+        this.sprite.clearTint();
+        this.enterState("attack");
+      }
+    } else {
+      const td = this.typeDef;
+      const flash = Math.sin(this.stateTimer * 20) > 0;
+      this.body.setFillStyle(flash ? COLORS.enemyWindup : td.bodyColor);
+      this.visor.setFillStyle(flash ? 0xffffff : td.visorColor);
+      if (this.stateTimer >= this.aiWindupDur) {
+        this.body.setFillStyle(td.bodyColor);
+        this.visor.setFillStyle(td.visorColor);
+        this.enterState("attack");
+      }
     }
   }
 
   private doAttack(): void {
     const dur = this.typeDef.attackDuration;
     const p = this.stateTimer / dur;
-    const swing = Math.sin(p * Math.PI);
-    const dir = this.facingRight ? 1 : -1;
-    this.body.scaleX = 1 + swing * 0.15;
-    this.head.x = dir * swing * 8;
 
     if (p >= 0.4 && !this.attackHitFired) {
       this.attackHitFired = true;
     }
 
+    if (!this.useSprite) {
+      const swing = Math.sin(p * Math.PI);
+      const dir = this.facingRight ? 1 : -1;
+      this.body.scaleX = 1 + swing * 0.15;
+      this.head.x = dir * swing * 8;
+    }
+
     if (this.stateTimer >= dur) {
-      this.body.scaleX = 1;
-      this.head.x = 0;
+      if (!this.useSprite) {
+        this.body.scaleX = 1;
+        this.head.x = 0;
+      }
       this.enterState("recover");
     }
   }
@@ -734,15 +897,25 @@ export class Enemy {
 
   private doChargeWindup(): void {
     const td = this.typeDef;
-    const flash = Math.sin(this.stateTimer * 25) > 0;
-    this.body.setFillStyle(flash ? 0xff4444 : td.bodyColor);
-    if (this.shoulderL) this.shoulderL.setFillStyle(flash ? 0xff6666 : 0xaa3333);
-    if (this.shoulderR) this.shoulderR.setFillStyle(flash ? 0xff6666 : 0xaa3333);
+    if (this.useSprite && this.sprite) {
+      const flash = Math.sin(this.stateTimer * 25) > 0;
+      if (flash) this.sprite.setTint(0xff4444);
+      else this.sprite.clearTint();
+    } else {
+      const flash = Math.sin(this.stateTimer * 25) > 0;
+      this.body.setFillStyle(flash ? 0xff4444 : td.bodyColor);
+      if (this.shoulderL) this.shoulderL.setFillStyle(flash ? 0xff6666 : 0xaa3333);
+      if (this.shoulderR) this.shoulderR.setFillStyle(flash ? 0xff6666 : 0xaa3333);
+    }
 
     if (this.stateTimer >= td.chargeWindup) {
-      this.body.setFillStyle(td.bodyColor);
-      if (this.shoulderL) this.shoulderL.setFillStyle(0xaa3333);
-      if (this.shoulderR) this.shoulderR.setFillStyle(0xaa3333);
+      if (this.useSprite && this.sprite) {
+        this.sprite.clearTint();
+      } else {
+        this.body.setFillStyle(td.bodyColor);
+        if (this.shoulderL) this.shoulderL.setFillStyle(0xaa3333);
+        if (this.shoulderR) this.shoulderR.setFillStyle(0xaa3333);
+      }
       this.chargeDir = this.facingRight ? 1 : -1;
       this.chargeDistLeft = td.chargeSpeed * td.chargeDuration;
       this.attackHitFired = false;
@@ -756,7 +929,12 @@ export class Enemy {
     this.container.x += this.chargeDir * move;
     this.chargeDistLeft -= move;
 
-    this.body.x = Math.sin(this.stateTimer * 40) * 2;
+    const chShake = Math.sin(this.stateTimer * 40) * 2;
+    if (this.useSprite && this.sprite) {
+      this.sprite.x = chShake;
+    } else {
+      this.body.x = chShake;
+    }
 
     if (!this.attackHitFired) {
       const px = this.intent.x;
@@ -774,7 +952,11 @@ export class Enemy {
     }
 
     if (this.chargeDistLeft <= 0 || this.container.x <= this.boundsMinX || this.container.x >= this.boundsMaxX) {
-      this.body.x = 0;
+      if (this.useSprite && this.sprite) {
+        this.sprite.x = 0;
+      } else {
+        this.body.x = 0;
+      }
       this.aiRecoverDur = 0.6;
       this.enterState("recover");
     }
@@ -784,17 +966,26 @@ export class Enemy {
   // ── Sniper ranged attack ──
 
   private doRangedWindup(): void {
-    const flash = Math.sin(this.stateTimer * 15) > 0;
-    this.visor.setFillStyle(flash ? 0xffffff : this.typeDef.visorColor);
-    if (this.antenna) this.antenna.setFillStyle(flash ? 0xffffff : this.typeDef.visorColor);
+    if (this.useSprite && this.sprite) {
+      const flash = Math.sin(this.stateTimer * 15) > 0;
+      if (flash) this.sprite.setTint(0xddbbff);
+      else this.sprite.clearTint();
+    } else {
+      const flash = Math.sin(this.stateTimer * 15) > 0;
+      this.visor.setFillStyle(flash ? 0xffffff : this.typeDef.visorColor);
+      if (this.antenna) this.antenna.setFillStyle(flash ? 0xffffff : this.typeDef.visorColor);
+    }
 
     const dx = this.intent.x - this.container.x;
     this.facingRight = dx > 0;
     this.container.scaleX = this.facingRight ? 1 : -1;
 
     if (this.stateTimer >= 0.4) {
-      this.visor.setFillStyle(this.typeDef.visorColor);
-      if (this.antenna) this.antenna.setFillStyle(this.typeDef.visorColor);
+      if (this.useSprite && this.sprite) this.sprite.clearTint();
+      else {
+        this.visor.setFillStyle(this.typeDef.visorColor);
+        if (this.antenna) this.antenna.setFillStyle(this.typeDef.visorColor);
+      }
       this.enterState("ranged_fire");
     }
   }
@@ -825,15 +1016,22 @@ export class Enemy {
   // ── Squad Leader boss attacks ──
 
   private doNetWindup(): void {
-    const flash = Math.sin(this.stateTimer * 18) > 0;
-    this.body.setFillStyle(flash ? 0x88aa55 : this.typeDef.bodyColor);
+    if (this.useSprite && this.sprite) {
+      const flash = Math.sin(this.stateTimer * 18) > 0;
+      if (flash) this.sprite.setTint(0x88aa55);
+      else this.sprite.clearTint();
+    } else {
+      const flash = Math.sin(this.stateTimer * 18) > 0;
+      this.body.setFillStyle(flash ? 0x88aa55 : this.typeDef.bodyColor);
+    }
 
     const dx = this.intent.x - this.container.x;
     this.facingRight = dx > 0;
     this.container.scaleX = this.facingRight ? 1 : -1;
 
     if (this.stateTimer >= 0.5) {
-      this.body.setFillStyle(this.typeDef.bodyColor);
+      if (this.useSprite && this.sprite) this.sprite.clearTint();
+      else this.body.setFillStyle(this.typeDef.bodyColor);
       this.enterState("net_throw");
     }
   }
@@ -862,11 +1060,19 @@ export class Enemy {
 
   private doMegaphoneWindup(): void {
     const p = this.stateTimer / 0.6;
-    const flash = Math.sin(this.stateTimer * 20) > 0;
-    this.visor.setFillStyle(flash ? 0xffffff : this.typeDef.visorColor);
-    if (this.megaphone) {
-      const scale = 1 + p * 0.5;
-      this.megaphone.setScale(scale);
+    if (this.useSprite && this.sprite) {
+      const flash = Math.sin(this.stateTimer * 20) > 0;
+      if (flash) this.sprite.setTint(0xffcc44);
+      else this.sprite.clearTint();
+      const scale = getEnemySpriteScale(this.typeDef.id) * (1 + p * 0.08);
+      this.sprite.setScale(scale);
+    } else {
+      const flash = Math.sin(this.stateTimer * 20) > 0;
+      this.visor.setFillStyle(flash ? 0xffffff : this.typeDef.visorColor);
+      if (this.megaphone) {
+        const scale = 1 + p * 0.5;
+        this.megaphone.setScale(scale);
+      }
     }
 
     const dx = this.intent.x - this.container.x;
@@ -874,8 +1080,13 @@ export class Enemy {
     this.container.scaleX = this.facingRight ? 1 : -1;
 
     if (this.stateTimer >= 0.6) {
-      this.visor.setFillStyle(this.typeDef.visorColor);
-      if (this.megaphone) this.megaphone.setScale(1);
+      if (this.useSprite && this.sprite) {
+        this.sprite.clearTint();
+        this.sprite.setScale(getEnemySpriteScale(this.typeDef.id));
+      } else {
+        this.visor.setFillStyle(this.typeDef.visorColor);
+        if (this.megaphone) this.megaphone.setScale(1);
+      }
       this.enterState("megaphone_blast");
     }
   }
@@ -901,20 +1112,29 @@ export class Enemy {
   private doBossTransition(): void {
     this.bossInvulnerable = true;
     const flash = Math.sin(this.stateTimer * 30) > 0;
-    this.body.setFillStyle(flash ? 0xffffff : this.typeDef.bodyColor);
+    if (this.useSprite && this.sprite) {
+      if (flash) this.sprite.setTintFill(0xffffff);
+      else this.sprite.clearTint();
+    } else {
+      this.body.setFillStyle(flash ? 0xffffff : this.typeDef.bodyColor);
+    }
 
     if (this.stateTimer >= 1.0) {
       this.bossInvulnerable = false;
-      this.body.setFillStyle(this.typeDef.bodyColor);
+      if (this.useSprite && this.sprite) {
+        this.sprite.clearTint();
+      } else {
+        this.body.setFillStyle(this.typeDef.bodyColor);
+      }
 
       if (this.bossPhase === 2) {
-        this.visor.setFillStyle(0xee8833);
+        if (!this.useSprite) this.visor.setFillStyle(0xee8833);
         this.speed *= 1.2;
       } else if (this.bossPhase === 3) {
-        this.visor.setFillStyle(0xff3333);
+        if (!this.useSprite) this.visor.setFillStyle(0xff3333);
         this.speed *= 1.25;
       } else if (this.bossPhase >= 4) {
-        this.visor.setFillStyle(0xff0000);
+        if (!this.useSprite) this.visor.setFillStyle(0xff0000);
         this.speed *= 1.3;
       }
 
@@ -966,7 +1186,12 @@ export class Enemy {
         damage = Math.floor(damage * (1 - td.shieldReduction));
         knockbackX *= 0.2;
         knockbackY *= 0.2;
-        if (this.shieldRect) {
+        if (this.useSprite && this.sprite) {
+          this.sprite.setTint(0xffffff);
+          this.scene.time.delayedCall(80, () => {
+            if (this.sprite) this.sprite.clearTint();
+          });
+        } else if (this.shieldRect) {
           this.shieldRect.setFillStyle(0xffffff);
           this.scene.time.delayedCall(80, () => {
             if (this.shieldRect) this.shieldRect.setFillStyle(0xaaaa55);
@@ -1001,14 +1226,23 @@ export class Enemy {
   }
 
   private flinch(): void {
-    const dir = this.knockbackVx > 0 ? 1 : -1;
-    this.body.x = dir * 4;
-    this.head.x = dir * 3;
-    this.scene.time.delayedCall(ENEMY.flinchDuration * 1000, () => {
-      if (!this.alive) return;
-      this.body.x = 0;
-      this.head.x = 0;
-    });
+    if (this.useSprite && this.sprite) {
+      const dir = this.knockbackVx > 0 ? 1 : -1;
+      this.sprite.x = dir * 4;
+      this.scene.time.delayedCall(ENEMY.flinchDuration * 1000, () => {
+        if (!this.alive || !this.sprite) return;
+        this.sprite.x = 0;
+      });
+    } else {
+      const dir = this.knockbackVx > 0 ? 1 : -1;
+      this.body.x = dir * 4;
+      this.head.x = dir * 3;
+      this.scene.time.delayedCall(ENEMY.flinchDuration * 1000, () => {
+        if (!this.alive) return;
+        this.body.x = 0;
+        this.head.x = 0;
+      });
+    }
   }
 
   stunFor(duration: number): void {
@@ -1076,7 +1310,11 @@ export class Enemy {
     this.stateTimer = 0;
     this.attackHitFired = false;
     if (state !== "evade") {
-      this.body.x = 0;
+      if (this.useSprite && this.sprite) {
+        this.sprite.x = 0;
+      } else {
+        this.body.x = 0;
+      }
     }
   }
 
@@ -1093,27 +1331,45 @@ export class Enemy {
 
   private applyHitstunVisual(): void {
     const shake = (Math.random() - 0.5) * 4;
-    this.body.x = shake;
-    this.head.x = shake;
+    if (this.useSprite && this.sprite) {
+      this.sprite.x = shake;
+    } else {
+      this.body.x = shake;
+      this.head.x = shake;
+    }
   }
 
   private flashWhite(): void {
-    this.body.setFillStyle(0xffffff);
-    this.head.setFillStyle(0xffffff);
-    const td = this.typeDef;
-    this.scene.time.delayedCall(80, () => {
-      if (!this.alive) return;
-      this.body.setFillStyle(td.bodyColor);
-      this.head.setFillStyle(td.bodyColor);
-    });
+    if (this.useSprite && this.sprite) {
+      this.sprite.setTintFill(0xffffff);
+      this.scene.time.delayedCall(80, () => {
+        if (!this.alive || !this.sprite) return;
+        this.sprite.clearTint();
+      });
+    } else {
+      this.body.setFillStyle(0xffffff);
+      this.head.setFillStyle(0xffffff);
+      const td = this.typeDef;
+      this.scene.time.delayedCall(80, () => {
+        if (!this.alive) return;
+        this.body.setFillStyle(td.bodyColor);
+        this.head.setFillStyle(td.bodyColor);
+      });
+    }
   }
 
   private die(): void {
     this.alive = false;
     this.aiState = "dead";
+
+    if (this.useSprite && this.sprite && this.animPrefix) {
+      this.prevAnimKey = `${this.animPrefix}-death`;
+      this.sprite.play(`${this.animPrefix}-death`, true);
+    }
+
     this.scene.tweens.add({
       targets: this.container,
-      alpha: 0, scaleY: 0.2, scaleX: 1.4,
+      alpha: 0, scaleY: 0.2,
       duration: ENEMY.deathDuration * 1000, ease: "Power2",
     });
 

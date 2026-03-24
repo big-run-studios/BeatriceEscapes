@@ -13,6 +13,7 @@ import { AB_SHEET_KEY, AB_FRAME_W, AB_FRAME_H, registerAndrewBeaAnims } from "..
 import { J_SHEET_KEY, J_FRAME_W, J_FRAME_H, registerJohnAnims } from "../entities/JohnAnims";
 import { H_SHEET_KEY, H_FRAME_W, H_FRAME_H, registerHeatherAnims } from "../entities/HeatherAnims";
 import { LD_SHEET_KEY, LL_SHEET_KEY, L_FRAME_W, L_FRAME_H, registerLunaAnims } from "../entities/LunaAnims";
+import { AGENT_SHEET_KEY, CADET_SHEET_KEY, E_FRAME_W, E_FRAME_H, registerEnemyAnims } from "../entities/EnemyAnims";
 import { HitFeel } from "../systems/HitFeel";
 import { VFXManager, VFX_SHEET_KEY, VFX_FRAME_W, VFX_FRAME_H } from "../systems/VFXManager";
 import { PROJ_SHEET_KEY, PROJ_FRAME_W, PROJ_FRAME_H } from "../entities/Projectile";
@@ -30,6 +31,7 @@ import { Totem } from "../entities/Totem";
 import { QABot } from "../debug/QABot";
 import { DebugPanel } from "../debug/DebugPanel";
 import { AudioManager } from "../systems/AudioManager";
+import eventBus, { HUD_EVENTS } from "../systems/EventBus";
 
 interface ArenaConfig {
   mode: "dummies" | "enemies" | "run";
@@ -71,6 +73,8 @@ export class ArenaScene extends Phaser.Scene {
   private knockoutTriggered = false;
   private victoryTriggered = false;
   private sceneEnding = false;
+  private hitComboCount = 0;
+  private hitComboTimer = 0;
 
   private levelWidth = ARENA.width;
   private waveTriggers: { x: number; wave: WaveDef; triggered: boolean }[] = [];
@@ -120,6 +124,17 @@ export class ArenaScene extends Phaser.Scene {
       frameWidth: PROJ_FRAME_W,
       frameHeight: PROJ_FRAME_H,
     });
+    this.load.spritesheet(AGENT_SHEET_KEY, `${base}art/enemies/marc-agent.png`, {
+      frameWidth: E_FRAME_W,
+      frameHeight: E_FRAME_H,
+    });
+    this.load.spritesheet(CADET_SHEET_KEY, `${base}art/enemies/marc-cadet.png`, {
+      frameWidth: E_FRAME_W,
+      frameHeight: E_FRAME_H,
+    });
+    this.load.image("bg-sky-z1", `${base}art/backgrounds/zone1/sky.png`);
+    this.load.image("bg-houses-z1", `${base}art/backgrounds/zone1/houses.png`);
+    this.load.image("bg-ground-z1", `${base}art/backgrounds/zone1/ground.png`);
   }
 
   init(data: Partial<ArenaConfig>): void {
@@ -138,6 +153,7 @@ export class ArenaScene extends Phaser.Scene {
     registerJohnAnims(this);
     registerHeatherAnims(this);
     registerLunaAnims(this);
+    registerEnemyAnims(this);
     this.vfx = new VFXManager(this);
     this.hitFeel = new HitFeel(this, this.vfx);
 
@@ -184,6 +200,7 @@ export class ArenaScene extends Phaser.Scene {
 
     this.events.once("shutdown", () => {
       this.sceneEnding = true;
+      eventBus.emit(HUD_EVENTS.SCENE_ENDING);
       this.enemies = [];
       this.projectiles = [];
       this.enemyProjectiles = [];
@@ -245,6 +262,9 @@ export class ArenaScene extends Phaser.Scene {
     this.addHUD();
     this.initDebugPanel();
 
+    this.scene.run("CombatHUDScene");
+    eventBus.emit(HUD_EVENTS.SCENE_READY);
+
     this.cameras.main.fadeIn(400, 0, 0, 0);
 
     AudioManager.instance.playMusic("arena");
@@ -280,11 +300,22 @@ export class ArenaScene extends Phaser.Scene {
     }
 
     if (this.input_mgr.justPressed(Action.PAUSE) && !this.knockoutTriggered && !this.victoryTriggered) {
-      this.returnToHub();
+      this.scene.pause();
+      if (this.scene.isActive("CombatHUDScene")) this.scene.pause("CombatHUDScene");
+      this.scene.launch("SettingsScene", { callerKey: "ArenaScene" });
       return;
     }
 
     const dt = delta / 1000;
+
+    if (this.hitComboTimer > 0) {
+      this.hitComboTimer -= dt;
+      if (this.hitComboTimer <= 0) {
+        this.hitComboCount = 0;
+        eventBus.emit(HUD_EVENTS.COMBO_RESET);
+      }
+    }
+
     this.resetTotemBuffs();
     this.checkTotemSpawns();
     this.updateTotems(dt);
@@ -1004,22 +1035,13 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private spawnDamageNumber(x: number, y: number, amount: number, color: number): void {
-    const txt = this.add.text(x, y - 30, `${Math.round(amount)}`, {
-      fontFamily: "monospace", fontSize: "14px", fontStyle: "bold",
-      color: `#${color.toString(16).padStart(6, "0")}`,
-      stroke: "#000000", strokeThickness: 2,
-    });
-    txt.setOrigin(0.5);
-    txt.setDepth(9999);
-    const offsetX = (Math.random() - 0.5) * 20;
-    this.tweens.add({
-      targets: txt,
-      x: x + offsetX, y: y - 60,
-      alpha: 0,
-      duration: 700,
-      ease: "Cubic.easeOut",
-      onComplete: () => txt.destroy(),
-    });
+    this.vfx.damageNumber(x, y - 10, Math.round(amount), color);
+  }
+
+  private registerHitCombo(): void {
+    this.hitComboCount++;
+    this.hitComboTimer = 2.0;
+    eventBus.emit(HUD_EVENTS.COMBO_HIT, { count: this.hitComboCount });
   }
 
   private cleanupDeadEnemies(): void {
@@ -1184,6 +1206,7 @@ export class ArenaScene extends Phaser.Scene {
         this.spawnDamageNumber(enemy.x, enemy.y - enemy.height / 2, hitBox.damage, 0xffffff);
         this.hitFeel.impactFlash(enemy.x, enemy.y - enemy.height / 3);
         this.hitFeel.shake(hitBox.shakeIntensity, hitBox.shakeDuration);
+        this.registerHitCombo();
 
         if (this.config.mode === "run" || this.config.mode === "enemies") {
           const ctx = { x: this.player.x, y: this.player.y, targetX: enemy.x, targetY: enemy.y };
@@ -1257,6 +1280,7 @@ export class ArenaScene extends Phaser.Scene {
           this.spawnDamageNumber(enemy.x, enemy.y - enemy.height / 2, proj.damage, 0xffffff);
           this.hitFeel.projectileImpact(enemy.x, enemy.y - enemy.height / 3, proj.circle.fillColor);
           this.hitFeel.shake(proj.shakeIntensity, proj.shakeDuration);
+          this.registerHitCombo();
 
           if (this.config.mode === "run" || this.config.mode === "enemies") {
             const ctx = { x: proj.x, y: proj.worldY, targetX: enemy.x, targetY: enemy.y };
@@ -1485,24 +1509,60 @@ export class ArenaScene extends Phaser.Scene {
 
   private drawArena(): void {
     const w = this.levelWidth;
-    const bg = this.add.rectangle(w / 2, ARENA.height / 2, w, ARENA.height, COLORS.background);
-    bg.setDepth(-1000);
-    const ground = this.add.rectangle(w / 2, ARENA.groundY + ARENA.groundHeight / 2, w, ARENA.groundHeight, COLORS.groundFill);
-    ground.setDepth(-999);
-    const groundTop = this.add.rectangle(w / 2, ARENA.groundY, w, 2, COLORS.groundLine);
-    groundTop.setDepth(-998);
-    this.drawGroundLines();
-    this.drawBoundaryWalls();
-  }
 
-  private drawGroundLines(): void {
-    const gfx = this.add.graphics();
-    gfx.setDepth(-997);
-    gfx.lineStyle(1, COLORS.groundLine, 0.3);
-    const spacing = 60;
-    for (let y = ARENA.groundY + spacing; y < ARENA.groundY + ARENA.groundHeight; y += spacing) {
-      gfx.lineBetween(0, y, this.levelWidth, y);
+    const hasSky = this.textures.exists("bg-sky-z1");
+    const hasHouses = this.textures.exists("bg-houses-z1");
+    const hasGround = this.textures.exists("bg-ground-z1");
+
+    if (hasSky) {
+      const skyTex = this.textures.get("bg-sky-z1").getSourceImage();
+      const skyW = skyTex.width;
+      const skyH = skyTex.height;
+      const skyScale = ARENA.height / skyH;
+      const scaledSkyW = skyW * skyScale;
+      const tilesNeeded = Math.ceil(w / scaledSkyW) + 1;
+      for (let i = 0; i < tilesNeeded; i++) {
+        const sky = this.add.image(i * scaledSkyW, 0, "bg-sky-z1");
+        sky.setOrigin(0, 0);
+        sky.setScale(skyScale);
+        sky.setDepth(-1000);
+        sky.setScrollFactor(0.15, 1);
+      }
+    } else {
+      const bg = this.add.rectangle(w / 2, ARENA.height / 2, w, ARENA.height, COLORS.background);
+      bg.setDepth(-1000);
     }
+
+    if (hasHouses) {
+      const hTex = this.textures.get("bg-houses-z1").getSourceImage();
+      const hW = hTex.width;
+      const hH = hTex.height;
+      const hScale = ARENA.height / hH;
+      const scaledHW = hW * hScale;
+      const tilesNeeded = Math.ceil(w / scaledHW) + 1;
+      for (let i = 0; i < tilesNeeded; i++) {
+        const houses = this.add.image(i * scaledHW, 0, "bg-houses-z1");
+        houses.setOrigin(0, 0);
+        houses.setScale(hScale);
+        houses.setDepth(-999);
+        houses.setScrollFactor(0.4, 1);
+      }
+    }
+
+    if (hasGround) {
+      const groundTile = this.add.tileSprite(
+        0, ARENA.groundY, w, ARENA.groundHeight, "bg-ground-z1",
+      );
+      groundTile.setOrigin(0, 0);
+      groundTile.setDepth(-998);
+    } else {
+      const ground = this.add.rectangle(w / 2, ARENA.groundY + ARENA.groundHeight / 2, w, ARENA.groundHeight, COLORS.groundFill);
+      ground.setDepth(-999);
+      const groundTop = this.add.rectangle(w / 2, ARENA.groundY, w, 2, COLORS.groundLine);
+      groundTop.setDepth(-998);
+    }
+
+    this.drawBoundaryWalls();
   }
 
   private drawBoundaryWalls(): void {

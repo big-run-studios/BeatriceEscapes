@@ -1,0 +1,28 @@
+{
+  "name": "poison-cloud",
+  "description": "Toxic cloud effect for poison DOT boons",
+  "emitters": [
+    {
+      "lifespan": 600,
+      "speed": { "min": 10, "max": 30 },
+      "angle": { "min": 0, "max": 360 },
+      "scale": { "start": 0.08, "end": 0.25 },
+      "alpha": { "start": 0.6, "end": 0 },
+      "gravityY": -15,
+      "rotate": { "min": 0, "max": 360 },
+      "blendMode": "NORMAL",
+      "quantity": 4,
+      "tint": "0x33cc33"
+    },
+    {
+      "lifespan": 350,
+      "speed": { "min": 15, "max": 40 },
+      "angle": { "min": 0, "max": 360 },
+      "scale": { "start": 0.05, "end": 0 },
+      "alpha": { "start": 0.8, "end": 0 },
+      "blendMode": "ADD",
+      "quantity": 3,
+      "tint": "0x66dd44"
+    }
+  ]
+}

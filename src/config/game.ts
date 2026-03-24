@@ -54,6 +54,12 @@ export interface ComboNode {
   rush?: { speed: number; duration: number };
   burstCount?: number;
   children: ComboNode[];
+  /** Attack phase timing (from combo-starter pattern). If omitted, falls back to hitFrame/duration. */
+  phases?: {
+    anticipation: number;
+    contact: number;
+    recovery: number;
+  };
 }
 
 const PROJ_SMALL = { radius: 8, speed: 500, color: 0x88ccff, maxRange: 400, trailType: "wind" as const };

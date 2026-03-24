@@ -4,6 +4,8 @@ import { HubScene } from "./scenes/HubScene";
 import { ArenaScene } from "./scenes/ArenaScene";
 import { RoomMapScene } from "./scenes/RoomMapScene";
 import { NarrativeScene } from "./scenes/NarrativeScene";
+import { CombatHUDScene } from "./scenes/CombatHUDScene";
+import { SettingsScene } from "./scenes/SettingsScene";
 import { GAME_WIDTH, GAME_HEIGHT, COLORS } from "./config/game";
 import { setupAutoplay } from "./debug/autoplay";
 import { AudioManager } from "./systems/AudioManager";
@@ -28,12 +30,13 @@ const config: Phaser.Types.Core.GameConfig = {
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
   input: {
+    keyboard: true,
     gamepad: true,
   },
   audio: {
     noAudio: true,
   },
-  scene: [TitleScene, HubScene, ArenaScene, RoomMapScene, NarrativeScene],
+  scene: [TitleScene, HubScene, ArenaScene, RoomMapScene, NarrativeScene, CombatHUDScene, SettingsScene],
 };
 
 const game = new Phaser.Game(config);

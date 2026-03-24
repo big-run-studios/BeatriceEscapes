@@ -286,6 +286,60 @@ export class VFXManager {
     this.impactGlow.explode(count, x, y);
   }
 
+  // ── Floating damage numbers (from health-bar-plugin pattern) ──
+
+  damageNumber(x: number, y: number, amount: number, color = 0xffffff, isCrit = false): void {
+    const label = isCrit ? `CRIT ${amount}` : `${amount}`;
+    const fontSize = isCrit ? "18px" : "14px";
+    const text = this.scene.add.text(x, y, label, {
+      fontFamily: "monospace",
+      fontSize,
+      color: `#${color.toString(16).padStart(6, "0")}`,
+      stroke: "#000000",
+      strokeThickness: 3,
+      fontStyle: isCrit ? "bold" : "normal",
+    });
+    text.setOrigin(0.5, 1);
+    text.setDepth(y + 100);
+
+    const offsetX = (Math.random() - 0.5) * 30;
+    this.scene.tweens.add({
+      targets: text,
+      y: y - 40 - Math.random() * 20,
+      x: x + offsetX,
+      alpha: 0,
+      scale: isCrit ? 1.3 : 1,
+      duration: isCrit ? 900 : 700,
+      ease: "Power2",
+      onComplete: () => text.destroy(),
+    });
+  }
+
+  healNumber(x: number, y: number, amount: number): void {
+    this.damageNumber(x, y, amount, 0x44ff44);
+  }
+
+  statusText(x: number, y: number, label: string, color = 0xffcc44): void {
+    const text = this.scene.add.text(x, y, label, {
+      fontFamily: "monospace",
+      fontSize: "12px",
+      color: `#${color.toString(16).padStart(6, "0")}`,
+      stroke: "#000000",
+      strokeThickness: 2,
+    });
+    text.setOrigin(0.5, 1);
+    text.setDepth(y + 100);
+
+    this.scene.tweens.add({
+      targets: text,
+      y: y - 30,
+      alpha: 0,
+      duration: 600,
+      ease: "Power2",
+      onComplete: () => text.destroy(),
+    });
+  }
+
   // ── Trail factories (caller owns lifecycle) ──
 
   createProjectileTrail(

@@ -64,6 +64,10 @@ export interface BoonDef {
   icon?: string;
   stackable?: boolean;
   slot?: BoonSlot;
+  /** Prerequisite boon IDs that must be owned (any slot/passive) before this boon is offered. */
+  prerequisites?: string[];
+  /** Shot pattern override for ranged attacks when this boon is equipped. */
+  shotPattern?: string;
 }
 
 export interface EventContext {
@@ -163,6 +167,7 @@ export const MERLIN_BOONS: BoonDef[] = [
     name: "Electric Surge",
     description: "Light attacks spark for 10 damage. Heavy attacks call lightning for 20 damage.",
     wizard: "Merlin", rarity: "rare", color: BOLT_COLOR, icon: "electric-surge", slot: "attack",
+    prerequisites: ["spark-strike"],
     effects: [
       {
         type: "triggered", trigger: "onLightHit",
@@ -180,6 +185,7 @@ export const MERLIN_BOONS: BoonDef[] = [
     name: "Arcane Restoration",
     description: "After clearing a room, Merlin's magic heals you for 30% of your max HP.",
     wizard: "Merlin", rarity: "rare", color: SPARK_COLOR, icon: "arcane-restoration", slot: "aid",
+    prerequisites: ["jolting-speed"],
     effects: [{
       type: "triggered", trigger: "onRoomClear",
       action: { kind: "heal", amount: 30, percent: true },
@@ -192,6 +198,7 @@ export const MERLIN_BOONS: BoonDef[] = [
     name: "Arcane Tempest",
     description: "ALL attacks emit chain lightning (12 dmg, 3 bounces). Heavy calls 25 dmg bolt. +15% damage.",
     wizard: "Merlin", rarity: "legendary", color: 0xffee88, icon: "arcane-tempest", slot: "attack",
+    prerequisites: ["electric-surge"],
     effects: [
       {
         type: "triggered", trigger: "onLightHit",
@@ -323,6 +330,7 @@ export const MORGAN_BOONS: BoonDef[] = [
     name: "Festering Wounds",
     description: "Heavy attacks poison for 8 dmg every 0.25s (6 ticks) and burst for 10 damage.",
     wizard: "Morgan", rarity: "rare", color: TOXIN_COLOR, icon: "festering-wounds", slot: "special",
+    prerequisites: ["toxic-strike"],
     effects: [
       {
         type: "triggered", trigger: "onHeavyHit",
@@ -339,6 +347,7 @@ export const MORGAN_BOONS: BoonDef[] = [
     name: "Pandemic",
     description: "ALL attacks poison targets (light: 5 dmg, heavy: 7 dmg). +15% damage.",
     wizard: "Morgan", rarity: "legendary", color: 0x88ff44, icon: "pandemic", slot: "attack",
+    prerequisites: ["festering-wounds"],
     effects: [
       {
         type: "triggered", trigger: "onLightHit",

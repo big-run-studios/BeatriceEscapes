@@ -1,0 +1,25 @@
+{
+  "name": "lightning-strike",
+  "description": "Electric bolt impact for Merlin's lightning boons",
+  "emitters": [
+    {
+      "lifespan": 200,
+      "speed": { "min": 50, "max": 150 },
+      "angle": { "min": 250, "max": 290 },
+      "scale": { "start": 0.12, "end": 0 },
+      "alpha": { "start": 1, "end": 0 },
+      "blendMode": "ADD",
+      "quantity": 8,
+      "tint": "0x88ddff"
+    },
+    {
+      "lifespan": 300,
+      "speed": 0,
+      "scale": { "start": 0.1, "end": 0.6 },
+      "alpha": { "start": 0.9, "end": 0 },
+      "blendMode": "ADD",
+      "quantity": 1,
+      "tint": "0xaaeeff"
+    }
+  ]
+}

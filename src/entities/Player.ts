@@ -107,7 +107,7 @@ export class Player {
 
     this.shadow = scene.add.ellipse(0, PLAYER.height / 2 + 4, PLAYER.width + 16, 14, 0x000000, 0.3);
 
-    this.sprite = scene.add.sprite(0, PLAYER.height / 2, AB_SHEET_KEY, 7);
+    this.sprite = scene.add.sprite(0, PLAYER.height / 2, AB_SHEET_KEY, 0);
     this.sprite.setOrigin(0.5, 1.0);
     this.sprite.setScale(AB_SPRITE_SCALE);
 
@@ -738,7 +738,7 @@ export class Player {
   }
 
   private applyUltimateVisual(): void {
-    this.sprite.play("ab-cast", true);
+    this.sprite.play("ab-ultimate", true);
     this.sprite.y = PLAYER.height / 2 + this.jumpOffset;
 
     if (this.ultPhase === "setup") {
@@ -1021,24 +1021,26 @@ export class Player {
     this.nameTag.y = -PLAYER.height / 2 - 62 + this.jumpOffset;
 
     if (s.isAirAttacking) {
-      this.sprite.play("ab-punch", true);
+      this.sprite.play("ab-jump", true);
     } else if (s.isThrowing) {
-      this.sprite.play("ab-punch", true);
+      this.sprite.play("ab-grab", true);
     } else if (s.isBlocking) {
-      this.sprite.play("ab-idle", true);
-      this.sprite.setScale(AB_SPRITE_SCALE * 1.05, AB_SPRITE_SCALE * 0.95);
-      return;
+      this.sprite.play("ab-block", true);
     } else if (s.isDashAttacking) {
-      this.sprite.play("ab-punch", true);
+      this.sprite.play("ab-dash", true);
     } else if (s.isDashing) {
-      this.sprite.play("ab-run", true);
+      this.sprite.play("ab-dash", true);
     } else if (s.isAttacking && s.currentNode) {
       const v = s.currentNode.visual;
-      if (v.startsWith("bea-")) {
-        this.sprite.play("ab-cast", true);
-      } else {
-        this.sprite.play("ab-punch", true);
-      }
+      if (v === "bea-cast") this.sprite.play("ab-cast", true);
+      else if (v === "bea-big-cast") this.sprite.play("ab-big-cast", true);
+      else if (v === "bea-burst") this.sprite.play("ab-burst", true);
+      else if (v === "bea-toss") this.sprite.play("ab-toss", true);
+      else if (v === "bea-finisher") this.sprite.play("ab-finisher", true);
+      else if (v === "andrew-punch") this.sprite.play("ab-punch", true);
+      else if (v === "andrew-uppercut") this.sprite.play("ab-uppercut", true);
+      else if (v === "andrew-slam") this.sprite.play("ab-slam", true);
+      else if (v === "andrew-rush") this.sprite.play("ab-rush", true);
     } else if (s.state === "walk") {
       this.sprite.play("ab-walk", true);
     } else {
