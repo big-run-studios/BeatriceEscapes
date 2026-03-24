@@ -5,8 +5,8 @@ export const LD_SHEET_KEY = "luna-dog";
 export const LL_SHEET_KEY = "luna-lunar";
 export const L_FRAME_W = 256;
 export const L_FRAME_H = 256;
-export const LD_SPRITE_SCALE = 0.29;
-export const LL_SPRITE_SCALE = 0.44;
+export const LD_SPRITE_SCALE = 0.39;
+export const LL_SPRITE_SCALE = 0.59;
 
 export function registerLunaAnims(scene: Phaser.Scene): void {
   if (scene.anims.exists("ld-idle")) return;

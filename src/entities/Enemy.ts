@@ -159,6 +159,8 @@ export class Enemy {
   private poisonTimer = 0;
   private poisonColor = 0x33cc33;
 
+  readonly visualScale: number;
+
   constructor(scene: Phaser.Scene, x: number, y: number, level: number, typeDef?: EnemyTypeDef) {
     this.scene = scene;
     this.level = level;
@@ -273,6 +275,12 @@ export class Enemy {
     }
 
     this.container = scene.add.container(x, y, children);
+
+    if (td.id === "zone_captain") this.visualScale = 3.33;
+    else if (td.id === "squad_leader") this.visualScale = 2;
+    else this.visualScale = 1.33;
+    this.container.setScale(this.visualScale);
+
     this.stateTimer = Math.random() * 0.5;
 
     if (td.isBoss) {
@@ -283,8 +291,8 @@ export class Enemy {
   get x(): number { return this.container.x; }
   get y(): number { return this.container.y; }
   get isAlive(): boolean { return this.alive; }
-  get width(): number { return this.typeDef.width; }
-  get height(): number { return this.typeDef.height; }
+  get width(): number { return this.typeDef.width * this.visualScale; }
+  get height(): number { return this.typeDef.height * this.visualScale; }
   get isDead(): boolean { return this.aiState === "dead"; }
 
   /**
@@ -320,7 +328,7 @@ export class Enemy {
     this.container.x += result.vx;
     this.container.y += result.vy;
     this.facingRight = result.facingRight;
-    this.container.scaleX = this.facingRight ? 1 : -1;
+    this.container.scaleX = (this.facingRight ? 1 : -1) * this.visualScale;
     if (result.newCircleAngle !== undefined) {
       this.circleAngle = result.newCircleAngle;
     }
@@ -546,7 +554,7 @@ export class Enemy {
       this.sprite.play(targetAnim, true);
     }
 
-    this.container.scaleX = this.facingRight ? 1 : -1;
+    this.container.scaleX = (this.facingRight ? 1 : -1) * this.visualScale;
   }
 
   // ── AI Decision ──
@@ -608,7 +616,7 @@ export class Enemy {
 
     switch (pick) {
       case "melee":
-        if (dx < this.typeDef.attackRange * 1.5) {
+        if (dx < this.typeDef.attackRange * this.visualScale * 1.5) {
           this.enterState("windup");
         } else {
           this.enterState("chase");
@@ -680,10 +688,10 @@ export class Enemy {
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     this.facingRight = dx > 0;
-    this.container.scaleX = this.facingRight ? 1 : -1;
+    this.container.scaleX = (this.facingRight ? 1 : -1) * this.visualScale;
 
-    const atkRange = this.typeDef.attackRange;
-    if (Math.abs(dx) < atkRange && Math.abs(dy) < ENEMY.attackDepthRange) {
+    const atkRange = this.typeDef.attackRange * this.visualScale;
+    if (Math.abs(dx) < atkRange && Math.abs(dy) < ENEMY.attackDepthRange * this.visualScale) {
       this.enterState("windup");
       return;
     }
@@ -720,7 +728,7 @@ export class Enemy {
     const dy = this.container.y - py;
 
     this.facingRight = dx > 0;
-    this.container.scaleX = this.facingRight ? 1 : -1;
+    this.container.scaleX = (this.facingRight ? 1 : -1) * this.visualScale;
 
     const yDir = dy >= 0 ? 1 : -1;
     const flankY = py + yDir * this.aiFlankOffset;
@@ -732,11 +740,12 @@ export class Enemy {
       const driftAway = dx > 0 ? -1 : 1;
       this.container.x += driftAway * this.speed * this.aiFlankWideArc * 0.5 * dt;
     } else {
-      const behindX = px + (this.intent.facingRight ? -1 : 1) * this.typeDef.attackRange * 1.5;
+      const scaledAtkRange = this.typeDef.attackRange * this.visualScale;
+      const behindX = px + (this.intent.facingRight ? -1 : 1) * scaledAtkRange * 1.5;
       const toX = behindX - this.container.x;
       const closeDist = Math.abs(toX);
 
-      if (closeDist > this.typeDef.attackRange && Math.abs(dy) < ENEMY.attackDepthRange && this.role === "engage") {
+      if (closeDist > scaledAtkRange && Math.abs(dy) < ENEMY.attackDepthRange * this.visualScale && this.role === "engage") {
         this.enterState("windup");
         return;
       }
@@ -757,7 +766,7 @@ export class Enemy {
     const dx = px - this.container.x;
 
     this.facingRight = dx > 0;
-    this.container.scaleX = this.facingRight ? 1 : -1;
+    this.container.scaleX = (this.facingRight ? 1 : -1) * this.visualScale;
     this.circleAngle += this.aiCircleSpeed * dt;
 
     const targetX = px + Math.cos(this.circleAngle) * this.aiCircleRadius;
@@ -809,7 +818,7 @@ export class Enemy {
     const dist = Math.abs(dx);
 
     this.facingRight = dx > 0;
-    this.container.scaleX = this.facingRight ? 1 : -1;
+    this.container.scaleX = (this.facingRight ? 1 : -1) * this.visualScale;
 
     if (dist >= this.aiRetreatDist) {
       if (this.typeDef.isRanged && this.rangedCooldown <= 0) {
@@ -853,11 +862,13 @@ export class Enemy {
     }
   }
 
+  private attackLanded = false;
+
   private doAttack(): void {
     const dur = this.typeDef.attackDuration;
     const p = this.stateTimer / dur;
 
-    if (p >= 0.4 && !this.attackHitFired) {
+    if (p >= 0.3 && p <= 0.85) {
       this.attackHitFired = true;
     }
 
@@ -873,24 +884,30 @@ export class Enemy {
         this.body.scaleX = 1;
         this.head.x = 0;
       }
+      this.attackLanded = false;
       this.enterState("recover");
     }
   }
 
   getAttackHit(): EnemyAttackHit | null {
     if (this.aiState !== "attack") return null;
-    if (!this.attackHitFired) return null;
-    this.attackHitFired = false;
+    if (!this.attackHitFired || this.attackLanded) return null;
 
+    const scaledRange = this.typeDef.attackRange * this.visualScale;
     const dir = this.facingRight ? 1 : -1;
     return {
-      x: this.container.x + dir * this.typeDef.attackRange,
+      x: this.container.x + dir * scaledRange,
       y: this.container.y,
-      range: this.typeDef.attackRange,
-      depthRange: ENEMY.attackDepthRange,
+      range: scaledRange,
+      depthRange: ENEMY.attackDepthRange * this.visualScale,
       damage: this.damage,
       knockback: 150 + this.level * 20,
     };
+  }
+
+  markAttackLanded(): void {
+    this.attackLanded = true;
+    this.attackHitFired = false;
   }
 
   // ── Brute charge ──
@@ -941,11 +958,11 @@ export class Enemy {
       const py = this.intent.y;
       const dx = Math.abs(this.container.x - px);
       const dy = Math.abs(this.container.y - py);
-      if (dx < td.width / 2 + 30 && dy < ENEMY.attackDepthRange + 20) {
+      if (dx < this.width / 2 + 30 && dy < ENEMY.attackDepthRange * this.visualScale + 20) {
         this.attackHitFired = true;
         this.pendingAoe = {
           x: this.container.x, y: this.container.y,
-          radius: td.width, depthRange: ENEMY.attackDepthRange + 20,
+          radius: this.width, depthRange: ENEMY.attackDepthRange * this.visualScale + 20,
           damage: td.chargeDamage, knockback: 400,
         };
       }
@@ -978,7 +995,7 @@ export class Enemy {
 
     const dx = this.intent.x - this.container.x;
     this.facingRight = dx > 0;
-    this.container.scaleX = this.facingRight ? 1 : -1;
+    this.container.scaleX = (this.facingRight ? 1 : -1) * this.visualScale;
 
     if (this.stateTimer >= 0.4) {
       if (this.useSprite && this.sprite) this.sprite.clearTint();
@@ -1002,7 +1019,7 @@ export class Enemy {
         speed: td.projectileSpeed,
         damage: td.projectileDamage,
         color: td.projectileColor,
-        radius: 6,
+        radius: 12,
         maxRange: 600,
       });
       this.rangedCooldown = td.fireInterval;
@@ -1027,7 +1044,7 @@ export class Enemy {
 
     const dx = this.intent.x - this.container.x;
     this.facingRight = dx > 0;
-    this.container.scaleX = this.facingRight ? 1 : -1;
+    this.container.scaleX = (this.facingRight ? 1 : -1) * this.visualScale;
 
     if (this.stateTimer >= 0.5) {
       if (this.useSprite && this.sprite) this.sprite.clearTint();
@@ -1048,7 +1065,7 @@ export class Enemy {
         speed: td.projectileSpeed,
         damage: td.projectileDamage,
         color: 0x88aa55,
-        radius: 10,
+        radius: 20,
         maxRange: 500,
         isNet: true,
       });
@@ -1077,7 +1094,7 @@ export class Enemy {
 
     const dx = this.intent.x - this.container.x;
     this.facingRight = dx > 0;
-    this.container.scaleX = this.facingRight ? 1 : -1;
+    this.container.scaleX = (this.facingRight ? 1 : -1) * this.visualScale;
 
     if (this.stateTimer >= 0.6) {
       if (this.useSprite && this.sprite) {
@@ -1309,6 +1326,7 @@ export class Enemy {
     this.aiState = state;
     this.stateTimer = 0;
     this.attackHitFired = false;
+    this.attackLanded = false;
     if (state !== "evade") {
       if (this.useSprite && this.sprite) {
         this.sprite.x = 0;
@@ -1369,7 +1387,7 @@ export class Enemy {
 
     this.scene.tweens.add({
       targets: this.container,
-      alpha: 0, scaleY: 0.2,
+      alpha: 0, scaleY: this.visualScale * 0.2,
       duration: ENEMY.deathDuration * 1000, ease: "Power2",
     });
 

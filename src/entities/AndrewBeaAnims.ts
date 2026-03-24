@@ -4,7 +4,7 @@ import { registerInterpAnims } from "../systems/AnimInterp";
 export const AB_SHEET_KEY = "andrew-bea";
 export const AB_FRAME_W = 256;
 export const AB_FRAME_H = 256;
-export const AB_SPRITE_SCALE = 0.75;
+export const AB_SPRITE_SCALE = 1.00;
 
 /*
  * Frame layout (8x6 grid = 48 cells, 43 sprites):

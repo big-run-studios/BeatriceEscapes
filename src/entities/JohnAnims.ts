@@ -4,7 +4,7 @@ import { registerInterpAnims } from "../systems/AnimInterp";
 export const J_SHEET_KEY = "john";
 export const J_FRAME_W = 256;
 export const J_FRAME_H = 256;
-export const J_SPRITE_SCALE = 0.39;
+export const J_SPRITE_SCALE = 0.52;
 
 export function registerJohnAnims(scene: Phaser.Scene): void {
   if (scene.anims.exists("j-idle")) return;

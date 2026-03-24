@@ -48,6 +48,7 @@ export class AudioManager {
   private currentMusic: ActiveMusic | null = null;
   private musicPaused = false;
   private musicGeneration = 0;
+  private _desiredTrack: string | null = null;
 
   private _masterVol: number = AUDIO_DEFAULTS.masterVolume;
   private _musicVol: number = AUDIO_DEFAULTS.musicVolume;
@@ -99,6 +100,13 @@ export class AudioManager {
     this.startWatchdog();
     this.claimLeadership();
 
+    this.ctx.addEventListener("statechange", () => {
+      this.log(`Context state changed to: ${this.ctx.state}`);
+      if (this.ctx.state === "running") {
+        this.restartMusicIfNeeded();
+      }
+    });
+
     const killAudio = () => this.dispose();
     window.addEventListener("pagehide", killAudio);
     window.addEventListener("beforeunload", killAudio);
@@ -115,6 +123,160 @@ export class AudioManager {
         await this.ctx.resume();
       } catch { /* iOS may reject resume outside gesture context */ }
     }
+    this.restartMusicIfNeeded();
+  }
+
+  /**
+   * Clean iOS unlock — called synchronously inside a touchend/click handler.
+   * Does NOT recreate the AudioContext. Instead:
+   * 1. Resumes the existing context (synchronous call, required by iOS).
+   * 2. Plays a 1-sample silent buffer to prime the hardware output.
+   * 3. Re-fetches & re-decodes the desired music buffer (iOS may have
+   *    produced an empty buffer when the context was suspended).
+   * 4. Starts the real music after a short delay (100ms) to let the
+   *    silent primer claim the audio channel first.
+   */
+  iOSUnlock(): void {
+    this.log(`iOSUnlock: ctx.state=${this.ctx.state} desiredTrack=${this._desiredTrack} connected=${this._connected}`);
+
+    if (!this._connected) {
+      this._connected = true;
+      try { this.masterGain.connect(this.ctx.destination); } catch { /* already connected */ }
+    }
+
+    try { this.ctx.resume(); } catch { /* */ }
+
+    const silentLen = Math.max(this.ctx.sampleRate * 0.25, 4096);
+    const silent = this.ctx.createBuffer(1, silentLen, this.ctx.sampleRate);
+    const primer = this.ctx.createBufferSource();
+    primer.buffer = silent;
+    primer.connect(this.ctx.destination);
+    primer.start(0);
+
+    this.log(`iOSUnlock: primer played (${silentLen} samples), ctx.state=${this.ctx.state}`);
+
+    const trackKey = this._desiredTrack ?? this.currentMusic?.key ?? null;
+    if (!trackKey) {
+      this.log("iOSUnlock: no desired track, done");
+      return;
+    }
+
+    const trackDef = MUSIC_TRACKS[trackKey];
+    if (!trackDef) return;
+
+    this.reDecodeAndPlay(trackKey, trackDef);
+  }
+
+  /**
+   * Re-fetch and re-decode a music buffer then start playback.
+   * iOS Safari may produce silent/empty buffers when decodeAudioData
+   * runs against a suspended AudioContext, so we re-decode from scratch.
+   */
+  private async reDecodeAndPlay(key: string, trackDef: MusicTrackDef): Promise<void> {
+    try {
+      this.log(`reDecodeAndPlay: fetching "${key}" from ${trackDef.url}`);
+      const resp = await fetch(trackDef.url);
+      if (!resp.ok) {
+        this.log(`reDecodeAndPlay: fetch failed ${resp.status}`);
+        return;
+      }
+      const arrayBuf = await resp.arrayBuffer();
+      const freshBuffer = await this.ctx.decodeAudioData(arrayBuf);
+
+      if (freshBuffer.duration < 0.01) {
+        this.log(`reDecodeAndPlay: decoded buffer is empty (duration=${freshBuffer.duration}), aborting`);
+        return;
+      }
+
+      this.bufferCache.set(key, freshBuffer);
+      this.log(`reDecodeAndPlay: decoded ok, duration=${freshBuffer.duration.toFixed(2)}s, scheduling play in 100ms`);
+
+      setTimeout(() => {
+        if (this.ctx.state !== "running") {
+          this.log(`reDecodeAndPlay: ctx still ${this.ctx.state} after delay, attempting resume`);
+          try { this.ctx.resume(); } catch { /* */ }
+        }
+        this.startFreshMusic(key, trackDef, freshBuffer);
+      }, 100);
+    } catch (e) {
+      this.log(`reDecodeAndPlay: error: ${e}`);
+      const cachedBuffer = this.bufferCache.get(key);
+      if (cachedBuffer) {
+        setTimeout(() => this.startFreshMusic(key, trackDef, cachedBuffer), 100);
+      }
+    }
+  }
+
+  private startFreshMusic(key: string, trackDef: MusicTrackDef, buffer: AudioBuffer): void {
+    if (this.currentMusic) {
+      try { this.currentMusic.source.stop(); } catch { /* */ }
+      try { this.currentMusic.source.disconnect(); } catch { /* */ }
+      try { this.currentMusic.gain.disconnect(); } catch { /* */ }
+      this.currentMusic = null;
+    }
+
+    const now = this.ctx.currentTime;
+    const trackGain = this.ctx.createGain();
+    trackGain.gain.setValueAtTime(trackDef.baseVolume, now);
+    trackGain.connect(this.musicGain);
+
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = trackDef.loop;
+    source.connect(trackGain);
+    source.start(0);
+
+    this.currentMusic = { source, gain: trackGain, key, trackDef };
+    this._desiredTrack = key;
+    this._lastMusicRestart = Date.now();
+    this.log(`startFreshMusic: "${key}" playing, gain=${trackDef.baseVolume} ctx.state=${this.ctx.state} ctxTime=${now.toFixed(2)}`);
+  }
+
+  private _lastMusicRestart = 0;
+
+  /**
+   * Sources started while the context was suspended may silently fail on iOS.
+   * If we have a current track but no audible output, restart it.
+   */
+  private restartMusicIfNeeded(): void {
+    if (this.ctx.state !== "running") return;
+    if (Date.now() - this._lastMusicRestart < 500) return;
+
+    if (!this.currentMusic && this._desiredTrack) {
+      const trackDef = MUSIC_TRACKS[this._desiredTrack];
+      const buffer = this.bufferCache.get(this._desiredTrack);
+      if (trackDef && buffer) {
+        this._lastMusicRestart = Date.now();
+        this.startFreshMusic(this._desiredTrack, trackDef, buffer);
+        return;
+      }
+    }
+
+    if (!this.currentMusic) return;
+    this._lastMusicRestart = Date.now();
+
+    const key = this.currentMusic.key;
+    const trackDef = this.currentMusic.trackDef;
+    const buffer = this.bufferCache.get(key);
+    if (!buffer) return;
+
+    try { this.currentMusic.source.stop(); } catch { /* */ }
+    try { this.currentMusic.source.disconnect(); } catch { /* */ }
+    try { this.currentMusic.gain.disconnect(); } catch { /* */ }
+
+    const now = this.ctx.currentTime;
+    const trackGain = this.ctx.createGain();
+    trackGain.gain.setValueAtTime(trackDef.baseVolume, now);
+    trackGain.connect(this.musicGain);
+
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = trackDef.loop;
+    source.connect(trackGain);
+    source.start(0);
+
+    this.currentMusic = { source, gain: trackGain, key, trackDef };
+    this.log(`restartMusicIfNeeded: restarted "${key}" gain=${trackDef.baseVolume} masterGain=${this._masterVol} musicGain=${this._musicVol} ctxTime=${now.toFixed(2)}`);
   }
 
   get context(): AudioContext { return this.ctx; }
@@ -129,7 +291,18 @@ export class AudioManager {
   /** Call on any user interaction (pointerdown, keydown). */
   noteInteraction(): void {
     this._lastInteraction = Date.now();
-    if (!this._connected && document.visibilityState === "visible" && document.hasFocus()) {
+    if (!this._connected && document.visibilityState === "visible") {
+      this.reconnectOutput();
+    }
+    if (this.ctx.state !== "running") {
+      try { this.ctx.resume(); } catch { /* */ }
+    }
+  }
+
+  /** Call when gamepad input is detected — keeps watchdog from killing audio. */
+  noteGamepadActivity(): void {
+    this._lastInteraction = Date.now();
+    if (!this._connected && document.visibilityState === "visible") {
       this.reconnectOutput();
     }
   }
@@ -193,6 +366,9 @@ export class AudioManager {
     this.masterGain.connect(this.ctx.destination);
     if (this.ctx.state !== "running") this.ctx.resume().catch(() => {});
     this.log("RECONNECTED — audio restored");
+    if (this._desiredTrack && !this.currentMusic) {
+      this.playMusic(this._desiredTrack);
+    }
   }
 
   // ── Volume Controls ──────────────────────────────────────
@@ -320,6 +496,7 @@ export class AudioManager {
 
     this.currentMusic = { source, gain: trackGain, key, trackDef };
     this.musicPaused = false;
+    this._desiredTrack = key;
     this.log(`NOW PLAYING: "${key}" gen=${gen}`);
   }
 

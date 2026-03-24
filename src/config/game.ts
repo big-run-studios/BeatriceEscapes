@@ -6,8 +6,8 @@ export const GAME_HEIGHT = 720;
 export const ARENA = {
   width: 2400,
   height: 800,
-  groundY: 300,
-  groundHeight: 500,
+  groundY: 363,
+  groundHeight: 375,
   boundaryPadding: 40,
 };
 
@@ -62,9 +62,9 @@ export interface ComboNode {
   };
 }
 
-const PROJ_SMALL = { radius: 8, speed: 500, color: 0x88ccff, maxRange: 400, trailType: "wind" as const };
-const PROJ_MEDIUM = { radius: 14, speed: 400, color: 0x55aaff, maxRange: 450, trailType: "wind-heavy" as const };
-const PROJ_BLAST = { radius: 16, speed: 350, color: 0xffcc44, maxRange: 500, trailType: "blast" as const };
+const PROJ_SMALL = { radius: 16, speed: 500, color: 0x88ccff, maxRange: 400, trailType: "wind" as const };
+const PROJ_MEDIUM = { radius: 28, speed: 400, color: 0x55aaff, maxRange: 450, trailType: "wind-heavy" as const };
+const PROJ_BLAST = { radius: 32, speed: 350, color: 0xffcc44, maxRange: 500, trailType: "blast" as const };
 
 export const COMBO_TREE: ComboNode[] = [
   // ── Square (L) branch: Bea wind shots (chip pokes, low damage) ──
@@ -211,7 +211,7 @@ export const ULTIMATE = {
   mpCost: 50,
   maxMp: 100,
   mpRegen: 8,
-  maxHp: 100,
+  maxHp: 50,
   blastDamage: 80,
   blastKnockback: 500,
   blastHitstopMs: 120,
@@ -247,14 +247,14 @@ export const DASH = {
 export const ENEMY = {
   width: 40,
   height: 70,
-  baseHp: 40,
-  baseDamage: 5,
+  baseHp: 120,
+  baseDamage: 10,
   baseSpeed: 60,
   hpPerLevel: 0.4,
   damagePerLevel: 0.25,
   speedPerLevel: 0.125,
-  attackRange: 65,
-  attackDepthRange: 40,
+  attackRange: 75,
+  attackDepthRange: 60,
   attackDuration: 0.25,
   hitstunDuration: 0.35,
   hitstunThreshold: 15,
@@ -497,7 +497,7 @@ export const JOHN = {
   width: 36,
   height: 60,
   depthSpeed: 260,
-  maxHp: 80,
+  maxHp: 40,
   maxMp: 80,
   mpRegen: 10,
 };
@@ -539,7 +539,7 @@ export const JOHN_MOVES: JohnMoveDef[] = [
     shakeIntensity: 1, shakeDuration: 30,
     duration: 0.25, hitFrame: 0.1, mpCost: 6,
     moveType: "projectile",
-    projectile: { radius: 6, speed: 550, color: 0x998866, maxRange: 400, trailType: "sling" as const },
+    projectile: { radius: 12, speed: 550, color: 0x998866, maxRange: 400, trailType: "sling" as const },
   },
 
   // ── Forward (advancing / aggressive) ──
@@ -556,7 +556,7 @@ export const JOHN_MOVES: JohnMoveDef[] = [
     shakeIntensity: 3, shakeDuration: 60,
     duration: 0.35, hitFrame: 0.12, mpCost: 10,
     moveType: "projectile",
-    projectile: { radius: 12, speed: 450, color: 0x44ddaa, maxRange: 450, trailType: "marble" as const },
+    projectile: { radius: 24, speed: 450, color: 0x44ddaa, maxRange: 450, trailType: "marble" as const },
   },
 
   // ── Up (launcher / anti-air) ──
@@ -573,7 +573,7 @@ export const JOHN_MOVES: JohnMoveDef[] = [
     shakeIntensity: 3, shakeDuration: 50,
     duration: 0.38, hitFrame: 0.18, mpCost: 8,
     moveType: "projectile",
-    projectile: { radius: 8, speed: 400, color: 0xee5533, maxRange: 500, trailType: "rocket" as const },
+    projectile: { radius: 16, speed: 400, color: 0xee5533, maxRange: 500, trailType: "rocket" as const },
   },
 
   // ── Down (ground / AoE) ──
@@ -640,7 +640,7 @@ export const LUNA = {
   lunarWidth: 40,
   lunarHeight: 80,
   depthSpeed: 150,
-  maxHp: 130,
+  maxHp: 65,
   maxMp: 80,
   mpRegen: 10,
 };
@@ -850,7 +850,7 @@ export const HEATHER = {
   width: 38,
   height: 72,
   depthSpeed: 200,
-  maxHp: 120,
+  maxHp: 60,
   maxMp: 100,
   mpRegen: 8,
 };
@@ -984,7 +984,7 @@ export const TOTEM_CONFIG = {
   ward: { healPerSec: 4, color: 0x44cc66, glowColor: 0x66ee88 },
   fury: {
     damageBoost: 0.2, fireInterval: 1.5, fireDamage: 8,
-    projectileSpeed: 300, projectileRadius: 10,
+    projectileSpeed: 300, projectileRadius: 20,
     color: 0xee6633, glowColor: 0xff8844,
     fireballColor: 0xff4422, fireballTrail: 0xffaa33,
   },

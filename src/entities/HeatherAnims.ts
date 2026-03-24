@@ -4,7 +4,7 @@ import { registerInterpAnims } from "../systems/AnimInterp";
 export const H_SHEET_KEY = "heather";
 export const H_FRAME_W = 256;
 export const H_FRAME_H = 256;
-export const H_SPRITE_SCALE = 0.52;
+export const H_SPRITE_SCALE = 0.69;
 
 export function registerHeatherAnims(scene: Phaser.Scene): void {
   if (scene.anims.exists("h-idle")) return;

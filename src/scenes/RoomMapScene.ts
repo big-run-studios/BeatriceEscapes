@@ -505,7 +505,7 @@ export class RoomMapScene extends Phaser.Scene {
   private buildBoonChoiceUI(): void {
     this.clearUI();
 
-    const title = this.add.text(GAME_WIDTH / 2, 220, "WIZARD BLESSING", {
+    const title = this.add.text(GAME_WIDTH / 2, 220, "Need a Boost?", {
       fontFamily: "Georgia, serif", fontSize: "32px",
       color: COLORS.accent, fontStyle: "bold",
     });
@@ -513,7 +513,7 @@ export class RoomMapScene extends Phaser.Scene {
     title.setDepth(10);
     this.uiObjects.push(title);
 
-    const subtitle = this.add.text(GAME_WIDTH / 2, 253, "\"Choose wisely, little firestarter's family.\" \u2014 Merlin", {
+    const subtitle = this.add.text(GAME_WIDTH / 2, 253, "Pick a blessing to power up your hero!", {
       fontFamily: "Georgia, serif", fontSize: "12px",
       color: COLORS.subtitleText, fontStyle: "italic",
     });

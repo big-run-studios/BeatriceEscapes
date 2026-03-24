@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { AudioManager } from "./AudioManager";
 
 export enum Action {
   UP,
@@ -123,12 +124,20 @@ export class InputManager {
   private prevStickX = 0;
   private prevStickY = 0;
 
+  private static _buttonsWorking = true;
+  private static _axesSeen = false;
+  private static _buttonCheckFrames = 0;
+  static get buttonsWorking(): boolean { return InputManager._buttonsWorking; }
+
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
     this.keyMap = DEFAULT_KEYBOARD_MAP;
     this.padMap = DEFAULT_GAMEPAD_MAP;
     this.setupKeyboard();
-    this.scene.input.on("pointerdown", () => { this._pointerJustDown = true; });
+    this.scene.input.on("pointerdown", () => {
+      this._pointerJustDown = true;
+      console.log(`[InputManager] pointerdown -> CONFIRM queued (scene=${scene.scene.key})`);
+    });
   }
 
   /** The most recently used input device. Defaults to gamepad if one is connected before any input. */
@@ -226,7 +235,45 @@ export class InputManager {
       this.setDevice("keyboard");
       return true;
     }
-    if (action === Action.CONFIRM && this._pointerJustDown) {
+    if (action === Action.CONFIRM && this._pointerJustDown && !this._gamepadConnected) {
+      return true;
+    }
+    if (action === Action.CONFIRM && !InputManager._buttonsWorking && this.isStickConfirm()) {
+      this.setDevice("gamepad");
+      return true;
+    }
+    return false;
+  }
+
+  private _stickConfirmCooldown = 0;
+
+  /** Always use native Gamepad API for axes -- Phaser's wrapper can be stale on iOS Safari. */
+  private getStickAxes(): { x: number; y: number } {
+    const native = this.nativePad;
+    if (native) {
+      return {
+        x: native.axes.length > 0 ? native.axes[0] : 0,
+        y: native.axes.length > 1 ? native.axes[1] : 0,
+      };
+    }
+    const phaserPad = this.pad;
+    if (phaserPad) {
+      return {
+        x: phaserPad.axes.length > 0 ? phaserPad.axes[0].getValue() : 0,
+        y: phaserPad.axes.length > 1 ? phaserPad.axes[1].getValue() : 0,
+      };
+    }
+    return { x: 0, y: 0 };
+  }
+
+  private isStickConfirm(): boolean {
+    if (this._stickConfirmCooldown > 0) return false;
+    const { x: lx, y: ly } = this.getStickAxes();
+    const wasNeutral = Math.abs(this.prevStickX) < 0.3 && Math.abs(this.prevStickY) < 0.3;
+    const magnitude = Math.sqrt(lx * lx + ly * ly);
+    if (wasNeutral && magnitude > 0.85) {
+      this._stickConfirmCooldown = 20;
+      console.log(`[InputManager] Stick-confirm triggered (mag=${magnitude.toFixed(2)})`);
       return true;
     }
     return false;
@@ -239,6 +286,9 @@ export class InputManager {
     this._lastDevice = device;
     this._hasReceivedInput = true;
     InputManager._globalDevice = device;
+    if (device === "gamepad") {
+      try { AudioManager.instance.noteGamepadActivity(); } catch { /* */ }
+    }
   }
 
   private static _globalDevice: InputDevice = "keyboard";
@@ -255,6 +305,10 @@ export class InputManager {
   /** Returns the display label for an action based on the last-used input device. */
   getLabel(action: Action): string {
     if (this.lastDevice === "gamepad") {
+      if (!InputManager._buttonsWorking) {
+        if (action === Action.CONFIRM) return "Flick\u00A0Stick";
+        if (action === Action.BACK) return "Tap\u00A0Screen";
+      }
       for (const mapping of this.padMap) {
         if (mapping.action === action) {
           return GAMEPAD_BUTTON_LABELS[mapping.button] ?? `Button ${mapping.button}`;
@@ -284,18 +338,7 @@ export class InputManager {
     if (this.isDown(Action.UP)) y -= 1;
     if (this.isDown(Action.DOWN)) y += 1;
 
-    const gamepad = this.pad;
-    let stickX = 0, stickY = 0;
-    if (gamepad) {
-      stickX = gamepad.axes.length > 0 ? gamepad.axes[0].getValue() : 0;
-      stickY = gamepad.axes.length > 1 ? gamepad.axes[1].getValue() : 0;
-    } else {
-      const native = this.nativePad;
-      if (native) {
-        stickX = native.axes.length > 0 ? native.axes[0] : 0;
-        stickY = native.axes.length > 1 ? native.axes[1] : 0;
-      }
-    }
+    const { x: stickX, y: stickY } = this.getStickAxes();
     if (Math.abs(stickX) > STICK_DEADZONE || Math.abs(stickY) > STICK_DEADZONE) {
       this.setDevice("gamepad");
     }
@@ -314,40 +357,69 @@ export class InputManager {
   /** Call at end of update() to sync previous-frame state for justPressed. */
   postUpdate(): void {
     this._pointerJustDown = false;
-    const gamepad = this.pad;
-    if (gamepad) {
+    if (this._stickConfirmCooldown > 0) this._stickConfirmCooldown--;
+
+    this.pad;
+    const buttons = this.getNativeButtons();
+    const { x: sx, y: sy } = this.getStickAxes();
+
+    if (buttons) {
+      let anyPressed = false;
       for (const mapping of this.padMap) {
-        const btn = gamepad.buttons[mapping.button];
-        this.prevPadButtons.set(mapping.button, btn ? btn.pressed : false);
+        const btn = buttons[mapping.button];
+        const pressed = btn ? btn.pressed : false;
+        this.prevPadButtons.set(mapping.button, pressed);
+        if (pressed) anyPressed = true;
       }
-      this.prevStickX = gamepad.axes.length > 0 ? gamepad.axes[0].getValue() : 0;
-      this.prevStickY = gamepad.axes.length > 1 ? gamepad.axes[1].getValue() : 0;
+      this.prevStickX = sx;
+      this.prevStickY = sy;
+      this.updateButtonDetection(anyPressed, sx, sy);
     } else {
-      const native = this.nativePad;
-      if (native) {
-        for (const mapping of this.padMap) {
-          const btn = native.buttons[mapping.button];
-          this.prevPadButtons.set(mapping.button, btn ? btn.pressed : false);
-        }
-        this.prevStickX = native.axes.length > 0 ? native.axes[0] : 0;
-        this.prevStickY = native.axes.length > 1 ? native.axes[1] : 0;
+      this.prevStickX = sx;
+      this.prevStickY = sy;
+    }
+  }
+
+  private static _buttonFallbackLogged = false;
+
+  private updateButtonDetection(anyPressed: boolean, stickX: number, stickY: number): void {
+    if (Math.abs(stickX) > STICK_DEADZONE || Math.abs(stickY) > STICK_DEADZONE) {
+      InputManager._axesSeen = true;
+    }
+    if (anyPressed) {
+      InputManager._buttonsWorking = true;
+      InputManager._buttonCheckFrames = 0;
+    } else {
+      InputManager._buttonCheckFrames++;
+    }
+    if (InputManager._buttonCheckFrames >= 120 && InputManager._axesSeen) {
+      InputManager._buttonsWorking = false;
+      if (!InputManager._buttonFallbackLogged) {
+        InputManager._buttonFallbackLogged = true;
+        console.log("[InputManager] Buttons non-functional — stick-flick and tap-to-confirm enabled");
       }
     }
   }
 
   /** True if any action key/button was just pressed (useful for "press anything"). */
   anyJustPressed(): boolean {
-    const gamepad = this.pad;
-    const source = gamepad ?? this.nativePad;
-    if (source) {
+    if (this._pointerJustDown && !this._gamepadConnected) return true;
+
+    const buttons = this.getNativeButtons();
+    if (buttons) {
       for (const mapping of this.padMap) {
-        const btn = source.buttons[mapping.button];
+        const btn = buttons[mapping.button];
         const wasDown = this.prevPadButtons.get(mapping.button) ?? false;
         if (btn && btn.pressed && !wasDown) {
           this.setDevice("gamepad");
           return true;
         }
       }
+    }
+
+    if (!InputManager._buttonsWorking && this.isStickConfirm()) {
+      this.setDevice("gamepad");
+      return true;
     }
 
     if (this.scene.input.keyboard) {
@@ -382,22 +454,19 @@ export class InputManager {
     return false;
   }
 
-  private isPadDown(action: Action): boolean {
-    const gamepad = this.pad;
-    if (gamepad) {
-      for (const mapping of this.padMap) {
-        if (mapping.action === action) {
-          const btn = gamepad.buttons[mapping.button];
-          if (btn?.pressed) return true;
-        }
-      }
-      return false;
-    }
+  /** Always prefer native Gamepad API for button reads -- Phaser's wrapper is unreliable on iOS. */
+  private getNativeButtons(): GamepadButton[] | null {
     const native = this.nativePad;
-    if (!native) return false;
+    return native ? Array.from(native.buttons) : null;
+  }
+
+  private isPadDown(action: Action): boolean {
+    this.pad;
+    const buttons = this.getNativeButtons();
+    if (!buttons) return false;
     for (const mapping of this.padMap) {
       if (mapping.action === action) {
-        const btn = native.buttons[mapping.button];
+        const btn = buttons[mapping.button];
         if (btn?.pressed) return true;
       }
     }
@@ -405,26 +474,21 @@ export class InputManager {
   }
 
   private isPadJustPressed(action: Action): boolean {
-    const gamepad = this.pad;
-    const native = gamepad ? null : this.nativePad;
-    if (!gamepad && !native) return false;
+    this.pad;
+    const buttons = this.getNativeButtons();
+    const { x: lx, y: ly } = this.getStickAxes();
+    if (!buttons && lx === 0 && ly === 0) return false;
 
-    for (const mapping of this.padMap) {
-      if (mapping.action === action) {
-        const btn = gamepad
-          ? gamepad.buttons[mapping.button]
-          : native!.buttons[mapping.button];
-        const wasDown = this.prevPadButtons.get(mapping.button) ?? false;
-        if (btn && btn.pressed && !wasDown) return true;
+    if (buttons) {
+      for (const mapping of this.padMap) {
+        if (mapping.action === action) {
+          const btn = buttons[mapping.button];
+          const wasDown = this.prevPadButtons.get(mapping.button) ?? false;
+          if (btn && btn.pressed && !wasDown) return true;
+        }
       }
     }
 
-    const lx = gamepad
-      ? (gamepad.axes.length > 0 ? gamepad.axes[0].getValue() : 0)
-      : (native!.axes.length > 0 ? native!.axes[0] : 0);
-    const ly = gamepad
-      ? (gamepad.axes.length > 1 ? gamepad.axes[1].getValue() : 0)
-      : (native!.axes.length > 1 ? native!.axes[1] : 0);
     const thresh = STICK_DEADZONE + 0.15;
     if (action === Action.LEFT && lx < -thresh && this.prevStickX >= -thresh) return true;
     if (action === Action.RIGHT && lx > thresh && this.prevStickX <= thresh) return true;

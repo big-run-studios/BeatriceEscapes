@@ -7,8 +7,8 @@ export const E_FRAME_W = 256;
 export const E_FRAME_H = 256;
 
 const ENEMY_SPRITE_SCALES: Partial<Record<EnemyTypeId, number>> = {
-  agent: 0.45,
-  cadet: 0.40,
+  agent: 0.60,
+  cadet: 0.53,
 };
 
 const SPRITE_SHEET_MAP: Partial<Record<EnemyTypeId, string>> = {

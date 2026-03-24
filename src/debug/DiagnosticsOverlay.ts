@@ -216,4 +216,47 @@ export function initDiagnostics(game: Phaser.Game): void {
   installSceneLogging(game);
 
   setInterval(() => updateActiveSceneList(game), 1000);
+
+    let lastAudioState = "";
+    let lastPadState = "";
+    let inputPollCount = 0;
+    setInterval(() => {
+      const audio = AudioManager.instance;
+      const dbg = audio.getDebugInfo();
+      const audioKey = `${dbg.contextState}|${dbg.currentTrack}|${dbg.connected}`;
+      if (audioKey !== lastAudioState) {
+        console.log(`[Audio] state=${dbg.contextState} track=${dbg.currentTrack} conn=${dbg.connected} hb=${dbg.heartbeatAge}ms gain=${dbg.musicGainValue.toFixed(3)} master=${audio.masterVolume.toFixed(2)} music=${audio.musicVolume.toFixed(2)}`);
+        lastAudioState = audioKey;
+      }
+
+      const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()) : [];
+      const nativePad = pads.find(p => p !== null) ?? null;
+      const padInfo = nativePad ? `${nativePad.id.substring(0, 25)}` : "none";
+      const activeScene = game.scene.getScenes(true)[0];
+      const phaserPad = activeScene?.input?.gamepad?.getPad(0) ?? null;
+      const padKey = `${padInfo}|phaser:${phaserPad ? "yes" : "no"}|dev:${InputManager.globalDevice}`;
+
+      if (nativePad) {
+        const pressed: number[] = [];
+        const values: string[] = [];
+        for (let b = 0; b < nativePad.buttons.length; b++) {
+          const btn = nativePad.buttons[b];
+          if (btn) {
+            if (btn.pressed) pressed.push(b);
+            if (btn.value > 0.1) values.push(`b${b}=${btn.value.toFixed(2)}`);
+          }
+        }
+        const axes = nativePad.axes.map((a, i) => Math.abs(a) > 0.2 ? `a${i}=${a.toFixed(2)}` : "").filter(Boolean);
+        const anyInput = pressed.length > 0 || values.length > 0 || axes.length > 0;
+        if (anyInput || inputPollCount % 10 === 0) {
+          console.log(`[Pad Raw] btns=[${pressed.join(",")}] vals=[${values.join(",")}] ${axes.join(" ")} total=${nativePad.buttons.length} mapping=${nativePad.mapping} phaser=${phaserPad ? "yes" : "no"}`);
+        }
+      }
+
+      inputPollCount++;
+      if (padKey !== lastPadState || inputPollCount % 5 === 0) {
+        console.log(`[Input] native=${padInfo} phaser=${phaserPad ? phaserPad.id.substring(0, 20) : "null"} dev=${InputManager.globalDevice} scene=${activeScene?.scene.key ?? "?"}`);
+        lastPadState = padKey;
+      }
+    }, 500);
 }

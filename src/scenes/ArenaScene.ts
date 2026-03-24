@@ -90,6 +90,9 @@ export class ArenaScene extends Phaser.Scene {
   private fpsText?: Phaser.GameObjects.Text;
   private audioDebugText?: Phaser.GameObjects.Text;
 
+  private hudW = GAME_WIDTH;
+  private hudH = GAME_HEIGHT;
+
   constructor() {
     super({ key: "ArenaScene" });
   }
@@ -173,6 +176,7 @@ export class ArenaScene extends Phaser.Scene {
     this.projectiles = [];
     this.enemyProjectiles = [];
     this.pickups = [];
+    this.totems = [];
     this.rushHitDummies.clear();
     this.rushHitEnemies.clear();
     this.currentWave = 0;
@@ -181,6 +185,9 @@ export class ArenaScene extends Phaser.Scene {
     this.knockoutTriggered = false;
     this.victoryTriggered = false;
     this.sceneEnding = false;
+    this.hitComboCount = 0;
+    this.hitComboTimer = 0;
+    this.resonanceField = null;
     this.comboListTexts.clear();
     this.waveTriggers = [];
     this.scrollWaveIdx = 0;
@@ -193,6 +200,8 @@ export class ArenaScene extends Phaser.Scene {
     this.bossHpBarBorder = undefined;
     this.bossNameText = undefined;
     this.bossPhaseMarkers = [];
+    this.positionOverlays = [];
+    this.hitboxOverlays = [];
 
     this.events.on("poison-damage", (x: number, y: number, amount: number) => {
       this.spawnDamageNumber(x, y, amount, 0xcc66ff);
@@ -201,11 +210,16 @@ export class ArenaScene extends Phaser.Scene {
     this.events.once("shutdown", () => {
       this.sceneEnding = true;
       eventBus.emit(HUD_EVENTS.SCENE_ENDING);
+      for (const e of this.enemies) e.destroy();
+      for (const p of this.projectiles) p.destroy();
+      for (const p of this.enemyProjectiles) p.destroy();
+      for (const t of this.totems) { try { if (t.container?.scene) t.container.destroy(); } catch { /* already destroyed */ } }
       this.enemies = [];
       this.projectiles = [];
       this.enemyProjectiles = [];
       this.pickups = [];
       this.dummies = [];
+      this.totems = [];
     });
 
     const SCROLL_SECTION = GAME_WIDTH;
@@ -222,7 +236,7 @@ export class ArenaScene extends Phaser.Scene {
     this.drawArena();
 
     const startX = isScrolling ? SCROLL_PAD * 0.5 : this.levelWidth / 2 - 150;
-    const startY = ARENA.groundY + ARENA.groundHeight / 2;
+    const startY = ARENA.groundY + ARENA.groundHeight / 4;
     if (this.config.character === "john") {
       this.player = new JohnPlayer(this, startX, startY, this.input_mgr, this.hitFeel);
     } else if (this.config.character === "luna") {
@@ -646,9 +660,8 @@ export class ArenaScene extends Phaser.Scene {
     this.player.boundsMaxX = this.lockRightX - ARENA.boundaryPadding;
 
     const cam = this.cameras.main;
-    const currentScrollY = cam.scrollY + GAME_HEIGHT / 2;
     cam.stopFollow();
-    cam.pan(centerX, currentScrollY, 400, "Sine.easeInOut");
+    cam.pan(centerX, cam.midPoint.y, 400, "Sine.easeInOut");
 
     this.lockLeftWall?.destroy();
     this.lockRightWall?.destroy();
@@ -687,7 +700,12 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private showGoPrompt(): void {
-    this.goPromptObj = this.add.text(GAME_WIDTH - 120, GAME_HEIGHT / 2, "GO! \u2192", {
+    const zoom = this.cameras.main.zoom;
+    const viewW = GAME_WIDTH / zoom;
+    const viewH = GAME_HEIGHT / zoom;
+    const baseX = viewW - 80;
+
+    this.goPromptObj = this.add.text(baseX, viewH / 2, "GO! \u2192", {
       fontFamily: "Georgia, serif", fontSize: "40px",
       color: COLORS.accent, fontStyle: "bold",
     });
@@ -696,7 +714,6 @@ export class ArenaScene extends Phaser.Scene {
     this.goPromptObj.setDepth(25000);
     this.goPromptObj.setAlpha(0);
 
-    const baseX = GAME_WIDTH - 120;
     this.tweens.add({
       targets: this.goPromptObj,
       alpha: 1, duration: 200,
@@ -826,10 +843,10 @@ export class ArenaScene extends Phaser.Scene {
         this.enemies.push(spawned);
 
         spawned.container.setAlpha(0);
-        spawned.container.setScale(0.3);
+        spawned.container.setScale(0.3 * spawned.visualScale);
         this.tweens.add({
           targets: spawned.container,
-          alpha: 1, scaleX: 1, scaleY: 1,
+          alpha: 1, scaleX: spawned.visualScale, scaleY: spawned.visualScale,
           duration: 400, ease: "Back.easeOut",
         });
       }
@@ -1046,14 +1063,16 @@ export class ArenaScene extends Phaser.Scene {
 
   private cleanupDeadEnemies(): void {
     for (const e of this.enemies) {
-      this.time.delayedCall(500, () => e.destroy());
+      this.time.delayedCall(500, () => {
+        if (!this.sceneEnding) e.destroy();
+      });
     }
     this.enemies = [];
     this.rushHitEnemies.clear();
   }
 
   private showWaveAnnouncement(text: string): void {
-    const ann = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, text, {
+    const ann = this.add.text(this.hudW / 2, this.hudH / 2 - 40, text, {
       fontFamily: "Georgia, serif", fontSize: "48px",
       color: COLORS.accent, fontStyle: "bold",
     });
@@ -1088,7 +1107,7 @@ export class ArenaScene extends Phaser.Scene {
     this.sceneEnding = true;
 
     this.time.delayedCall(1200, () => {
-      const beaText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20, "Again!", {
+      const beaText = this.add.text(this.hudW / 2, this.hudH / 2 - 20, "Again!", {
         fontFamily: "Georgia, serif", fontSize: "56px",
         color: "#f08aaa", fontStyle: "bold italic",
       });
@@ -1128,7 +1147,7 @@ export class ArenaScene extends Phaser.Scene {
       restoreMusic = unduck;
     });
 
-    const ann = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 30, "RUN COMPLETE!", {
+    const ann = this.add.text(this.hudW / 2, this.hudH / 2 - 30, "RUN COMPLETE!", {
       fontFamily: "Georgia, serif", fontSize: "52px",
       color: COLORS.accent, fontStyle: "bold",
     });
@@ -1137,7 +1156,7 @@ export class ArenaScene extends Phaser.Scene {
     ann.setDepth(25000);
     ann.setAlpha(0);
 
-    const moneyEarned = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 30, `Earned: ${this.runState.moneyDisplay}`, {
+    const moneyEarned = this.add.text(this.hudW / 2, this.hudH / 2 + 30, `Earned: ${this.runState.moneyDisplay}`, {
       fontFamily: "Georgia, serif", fontSize: "24px",
       color: COLORS.moneyText,
     });
@@ -1402,7 +1421,8 @@ export class ArenaScene extends Phaser.Scene {
       const dx = Math.abs(hit.x - this.player.x);
       const dy = Math.abs(hit.y - this.player.y);
 
-      if (dx < hit.range + COMBAT.meleeHitRange && dy < hit.depthRange + 20) {
+      if (dx < COMBAT.meleeHitRange && dy < hit.depthRange) {
+        enemy.markAttackLanded();
         const wasBlocking = this.player.combat.isBlocking;
         const wasParrying = this.player.combat.isParrying || this.player.combat.isGuarding;
         const dir = enemy.x < this.player.x ? 1 : -1;
@@ -1512,7 +1532,6 @@ export class ArenaScene extends Phaser.Scene {
 
     const hasSky = this.textures.exists("bg-sky-z1");
     const hasHouses = this.textures.exists("bg-houses-z1");
-    const hasGround = this.textures.exists("bg-ground-z1");
 
     if (hasSky) {
       const skyTex = this.textures.get("bg-sky-z1").getSourceImage();
@@ -1549,18 +1568,28 @@ export class ArenaScene extends Phaser.Scene {
       }
     }
 
-    if (hasGround) {
-      const groundTile = this.add.tileSprite(
-        0, ARENA.groundY, w, ARENA.groundHeight, "bg-ground-z1",
-      );
-      groundTile.setOrigin(0, 0);
-      groundTile.setDepth(-998);
-    } else {
-      const ground = this.add.rectangle(w / 2, ARENA.groundY + ARENA.groundHeight / 2, w, ARENA.groundHeight, COLORS.groundFill);
-      ground.setDepth(-999);
-      const groundTop = this.add.rectangle(w / 2, ARENA.groundY, w, 2, COLORS.groundLine);
-      groundTop.setDepth(-998);
-    }
+    const gY = ARENA.groundY;
+    const gH = ARENA.groundHeight;
+    const sidewalkH = 40;
+    const centerY = gY + gH / 2;
+
+    const asphalt = this.add.rectangle(w / 2, gY + gH / 2, w, gH, 0x3a3a3a);
+    asphalt.setDepth(-998);
+
+    const topSidewalk = this.add.rectangle(w / 2, gY + sidewalkH / 2, w, sidewalkH, 0x999988);
+    topSidewalk.setDepth(-997);
+    const topCurb = this.add.rectangle(w / 2, gY + sidewalkH, w, 3, 0x666655);
+    topCurb.setDepth(-996);
+
+    const botSidewalk = this.add.rectangle(w / 2, gY + gH - sidewalkH / 2, w, sidewalkH, 0x999988);
+    botSidewalk.setDepth(-997);
+    const botCurb = this.add.rectangle(w / 2, gY + gH - sidewalkH, w, 3, 0x666655);
+    botCurb.setDepth(-996);
+
+    const yellowTop = this.add.rectangle(w / 2, centerY - 4, w, 3, 0xddcc22);
+    yellowTop.setDepth(-995);
+    const yellowBot = this.add.rectangle(w / 2, centerY + 4, w, 3, 0xddcc22);
+    yellowBot.setDepth(-995);
 
     this.drawBoundaryWalls();
   }
@@ -1574,6 +1603,10 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private setupCamera(): void {
+    const zoom = 1.35;
+    this.cameras.main.setZoom(zoom);
+    this.hudW = GAME_WIDTH / zoom;
+    this.hudH = GAME_HEIGHT / zoom;
     this.cameras.main.setBounds(0, 0, this.levelWidth, ARENA.height);
     this.cameras.main.startFollow(this.player.container, true, 0.08, 0.08);
     if (this.waveTriggers.length > 0) {
@@ -1583,22 +1616,25 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private addHUD(): void {
-    const version = this.add.text(GAME_WIDTH - 16, GAME_HEIGHT - 16, "B0.9.0", {
+    const hw = this.hudW;
+    const hh = this.hudH;
+
+    const version = this.add.text(hw - 16, hh - 16, "B0.9.0", {
       fontFamily: "monospace", fontSize: "14px", color: COLORS.subtitleText,
     });
     version.setOrigin(1, 1); version.setScrollFactor(0); version.setDepth(20000);
 
-    const controlHint = new PromptLine(this, 16, GAME_HEIGHT - 16, this.input_mgr, {
+    const controlHint = new PromptLine(this, 16, hh - 16, this.input_mgr, {
       fontFamily: "monospace", fontSize: "10px", color: COLORS.subtitleText,
     }, "left");
     controlHint.setScrollFactor(0); controlHint.setDepth(20000);
 
-    this.moneyDisplay = this.add.text(GAME_WIDTH - 16, 14, "", {
+    this.moneyDisplay = this.add.text(hw - 16, 14, "", {
       fontFamily: "monospace", fontSize: "16px", color: COLORS.moneyText, fontStyle: "bold",
     });
     this.moneyDisplay.setOrigin(1, 0); this.moneyDisplay.setScrollFactor(0); this.moneyDisplay.setDepth(20000);
 
-    this.waveDisplay = this.add.text(GAME_WIDTH - 16, 34, "", {
+    this.waveDisplay = this.add.text(hw - 16, 34, "", {
       fontFamily: "monospace", fontSize: "12px", color: COLORS.subtitleText,
     });
     this.waveDisplay.setOrigin(1, 0); this.waveDisplay.setScrollFactor(0); this.waveDisplay.setDepth(20000);
@@ -1633,7 +1669,7 @@ export class ArenaScene extends Phaser.Scene {
     this.fpsText.setDepth(30001);
     this.fpsText.setVisible(false);
 
-    this.audioDebugText = this.add.text(16, GAME_HEIGHT - 130, "", {
+    this.audioDebugText = this.add.text(16, this.hudH - 130, "", {
       fontFamily: "monospace", fontSize: "10px", color: "#00ccff",
       backgroundColor: "#000000aa",
       padding: { left: 6, right: 6, top: 4, bottom: 4 },
@@ -1812,9 +1848,9 @@ export class ArenaScene extends Phaser.Scene {
       return;
     }
 
-    const barW = GAME_WIDTH * 0.8;
+    const barW = this.hudW * 0.8;
     const barH = 14;
-    const barX = GAME_WIDTH * 0.1;
+    const barX = this.hudW * 0.1;
     const barY = 20;
 
     if (!this.bossHpBarBg) {
@@ -1824,7 +1860,7 @@ export class ArenaScene extends Phaser.Scene {
         .setScrollFactor(0).setDepth(20002).setOrigin(0, 0);
       this.bossHpBarFill = this.add.rectangle(barX, barY, barW, barH, 0x44cc44)
         .setScrollFactor(0).setDepth(20003).setOrigin(0, 0);
-      this.bossNameText = this.add.text(GAME_WIDTH / 2, barY - 8, "", {
+      this.bossNameText = this.add.text(this.hudW / 2, barY - 8, "", {
         fontFamily: "monospace", fontSize: "12px", color: "#ffffff", fontStyle: "bold",
       }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(20004);
 
@@ -1869,7 +1905,7 @@ export class ArenaScene extends Phaser.Scene {
       this.buildAndrewBeaComboListHUD();
     }
 
-    this.comboNameDisplay = this.add.text(GAME_WIDTH / 2, 68, "", {
+    this.comboNameDisplay = this.add.text(this.hudW / 2, 68, "", {
       fontFamily: "monospace", fontSize: "20px", color: COLORS.accent, fontStyle: "bold",
     });
     this.comboNameDisplay.setOrigin(0.5);
@@ -2265,6 +2301,8 @@ export class ArenaScene extends Phaser.Scene {
         const dy = Math.abs(enemy.y - totem.y);
         if (dx < hit.range + TOTEM_CONFIG.width && dy < hit.depthRange) {
           totem.takeHit(hit.damage);
+          enemy.markAttackLanded();
+          break;
         }
       }
     }

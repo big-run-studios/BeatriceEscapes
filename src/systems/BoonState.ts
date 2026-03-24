@@ -238,11 +238,10 @@ export class BoonState {
   }
 
   rollBoonChoices(count: number, wizardPool: string[]): BoonDef[] {
+    const wizard = wizardPool[Math.floor(Math.random() * wizardPool.length)];
     const pool: BoonDef[] = [];
-    for (const wizardName of wizardPool) {
-      const boons = ALL_BOON_POOLS[wizardName];
-      if (boons) pool.push(...boons);
-    }
+    const boons = ALL_BOON_POOLS[wizard];
+    if (boons) pool.push(...boons);
 
     const ownedIds = new Set<string>();
     for (const sb of this.slots.values()) ownedIds.add(sb.boon.id);
