@@ -98,6 +98,13 @@ export class AudioManager {
     this._lastInteraction = Date.now();
     this.startWatchdog();
     this.claimLeadership();
+
+    const killAudio = () => this.dispose();
+    window.addEventListener("pagehide", killAudio);
+    window.addEventListener("beforeunload", killAudio);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") this.disconnectOutput();
+    });
   }
 
   /** Resume context after user gesture (browser autoplay policy). */
@@ -119,7 +126,7 @@ export class AudioManager {
   /** Call on any user interaction (pointerdown, keydown). */
   noteInteraction(): void {
     this._lastInteraction = Date.now();
-    if (!this._connected && document.visibilityState === "visible") {
+    if (!this._connected && document.visibilityState === "visible" && document.hasFocus()) {
       this.reconnectOutput();
     }
   }
@@ -145,19 +152,32 @@ export class AudioManager {
     if (this._watchdogId) return;
     this._watchdogId = setInterval(() => {
       const visible = document.visibilityState === "visible";
-      const heartbeatFresh = (Date.now() - this._lastHeartbeat) < 2000;
+      const focused = document.hasFocus();
+      const heartbeatFresh = (Date.now() - this._lastHeartbeat) < 1500;
+      const interactionRecent = (Date.now() - this._lastInteraction) < 30_000;
 
       if (!visible || !heartbeatFresh) {
         if (this._connected) this.disconnectOutput();
+      } else if (!focused && !interactionRecent) {
+        if (this._connected) this.disconnectOutput();
       }
-    }, 1000);
+    }, 500);
   }
 
   private disconnectOutput(): void {
     if (!this._connected) return;
     this._connected = false;
     try { this.masterGain.disconnect(this.ctx.destination); } catch { /* already disconnected */ }
-    this.log("WATCHDOG: disconnected — audio silenced");
+    if (this.currentMusic) {
+      try { this.currentMusic.source.stop(); } catch { /* */ }
+      try { this.currentMusic.source.disconnect(); } catch { /* */ }
+      try { this.currentMusic.gain.disconnect(); } catch { /* */ }
+      this.currentMusic = null;
+    }
+    if (this.ctx.state === "running") {
+      this.ctx.suspend().catch(() => {});
+    }
+    this.log("WATCHDOG: suspended context + stopped music — audio killed");
   }
 
   private reconnectOutput(): void {
@@ -516,8 +536,10 @@ export class AudioManager {
       this.musicGain?.disconnect();
       this.sfxGain?.disconnect();
       this.uiGain?.disconnect();
-      this.ctx.close();
-    } catch { /* context may already be closed */ }
+      if (this.ctx.state !== "closed") {
+        try { this.ctx.close(); } catch { /* */ }
+      }
+    } catch { /* */ }
     this.bufferCache.clear();
     this.loadingPromises.clear();
     this.activeSfxCount.clear();

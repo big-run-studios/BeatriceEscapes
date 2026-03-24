@@ -11,6 +11,7 @@ import { BoonState } from "../systems/BoonState";
 import { ProjectileSpawnRequest, MeleeHitBox, AoeHit } from "./Player";
 import { TrainingDummy } from "./TrainingDummy";
 import { PlayerEntity } from "./PlayerEntity";
+import { J_SHEET_KEY, J_SPRITE_SCALE } from "./JohnAnims";
 
 const HP_BAR_W = 40;
 const HP_BAR_H = 4;
@@ -21,11 +22,10 @@ export class JohnPlayer implements PlayerEntity {
   readonly container: Phaser.GameObjects.Container;
   readonly combat: CombatStateMachine;
 
-  private body: Phaser.GameObjects.Rectangle;
-  private head: Phaser.GameObjects.Rectangle;
+  private sprite: Phaser.GameObjects.Sprite;
   private shadow: Phaser.GameObjects.Ellipse;
   private nameTag: Phaser.GameObjects.Text;
-  private backpack: Phaser.GameObjects.Rectangle;
+  private useSpriteSheet: boolean;
 
   private hpBarBg: Phaser.GameObjects.Rectangle;
   private hpBarFill: Phaser.GameObjects.Rectangle;
@@ -46,9 +46,6 @@ export class JohnPlayer implements PlayerEntity {
   boundsMaxX = ARENA.width - ARENA.boundaryPadding - JOHN.width / 2;
   activeStatuses: string[] = [];
   private statusIconText!: Phaser.GameObjects.Text;
-
-  private bodyBaseY = 0;
-  private headBaseY: number;
 
   private jumpOffset = 0;
   private jumpVelocity = 0;
@@ -102,13 +99,19 @@ export class JohnPlayer implements PlayerEntity {
     this.hitFeel = hitFeel;
     this.combat = new CombatStateMachine();
 
+    this.useSpriteSheet = scene.textures.exists(J_SHEET_KEY);
+
     this.shadow = scene.add.ellipse(0, JOHN.height / 2 + 4, JOHN.width + 12, 12, 0x000000, 0.3);
-    this.body = scene.add.rectangle(0, 0, JOHN.width, JOHN.height, COLORS.johnFill);
-    this.body.setStrokeStyle(2, COLORS.johnOutline);
-    this.head = scene.add.rectangle(0, -JOHN.height / 2 - 10, JOHN.width * 0.65, 20, COLORS.johnFill);
-    this.head.setStrokeStyle(2, COLORS.johnOutline);
-    this.backpack = scene.add.rectangle(-12, -5, 14, 22, COLORS.johnBackpack);
-    this.backpack.setStrokeStyle(1, 0x665533);
+
+    if (this.useSpriteSheet) {
+      this.sprite = scene.add.sprite(0, JOHN.height / 2, J_SHEET_KEY, 0);
+      this.sprite.setOrigin(0.5, 1.0);
+      this.sprite.setScale(J_SPRITE_SCALE);
+    } else {
+      this.sprite = scene.add.sprite(0, 0, "__DEFAULT");
+      this.sprite.setVisible(false);
+    }
+
     this.nameTag = scene.add.text(0, 0, "", { fontSize: "1px" });
     this.nameTag.setAlpha(0);
 
@@ -121,14 +124,13 @@ export class JohnPlayer implements PlayerEntity {
       fontFamily: "monospace", fontSize: "8px", color: "#cc66ff",
     });
 
-    this.container = scene.add.container(x, y, [
-      this.shadow, this.body, this.head, this.backpack, this.nameTag,
+    const children: Phaser.GameObjects.GameObject[] = [
+      this.shadow, this.sprite, this.nameTag,
       this.hpBarBg, this.hpBarFill, this.mpBarBg, this.mpBarFill,
       this.statusIconText,
-    ]);
+    ];
 
-    this.bodyBaseY = 0;
-    this.headBaseY = -JOHN.height / 2 - 10;
+    this.container = scene.add.container(x, y, children);
   }
 
   get x(): number { return this.container.x; }
@@ -179,7 +181,7 @@ export class JohnPlayer implements PlayerEntity {
   // ── Update Loop ──
 
   update(dt: number): void {
-    if (this.isDead) return;
+    if (this.isDead || !this.container?.scene) return;
     this.combat.update(dt);
     this.regenMp(dt);
     if (this.dashCooldownTimer > 0) this.dashCooldownTimer -= dt;
@@ -476,6 +478,7 @@ export class JohnPlayer implements PlayerEntity {
               damage: DASH.lightDamage, knockback: DASH.lightKnockback,
               hitstopMs: DASH.lightHitstopMs,
               shakeIntensity: DASH.lightShakeIntensity, shakeDuration: DASH.lightShakeDuration,
+              trailType: "sling",
             },
           });
         } else {
@@ -507,15 +510,7 @@ export class JohnPlayer implements PlayerEntity {
   }
 
   private spawnAfterimage(): void {
-    const ghost = this.scene.add.rectangle(
-      this.container.x, this.container.y,
-      JOHN.width, JOHN.height, COLORS.johnFill, 0.3,
-    );
-    ghost.setDepth(this.container.y - 1);
-    this.scene.tweens.add({
-      targets: ghost, alpha: 0, duration: 200,
-      onComplete: () => ghost.destroy(),
-    });
+    this.hitFeel.vfx.dashDust(this.container.x, this.container.y + JOHN.height / 2);
   }
 
   // ── Take Damage / Parry ──
@@ -551,12 +546,15 @@ export class JohnPlayer implements PlayerEntity {
 
   private handleHitstun(dt: number): void {
     this.applyKnockback(dt);
-    const shake = (Math.random() - 0.5) * 4;
-    this.body.x = shake; this.head.x = shake;
-    this.body.y = this.bodyBaseY; this.head.y = this.headBaseY;
+    if (this.useSpriteSheet) {
+      this.sprite.play("j-hit", true);
+      this.sprite.y = JOHN.height / 2;
+      this.sprite.x = (Math.random() - 0.5) * 4;
+      this.container.scaleX = this.facingRight ? 1 : -1;
+    }
     if (this.combat.stateTimer >= PLAYER_HIT.hitstunDuration) {
       this.combat.toIdle();
-      this.resetPose();
+      if (this.useSpriteSheet) this.sprite.x = 0;
     }
   }
 
@@ -564,19 +562,10 @@ export class JohnPlayer implements PlayerEntity {
     this.applyKnockback(dt);
     const totalDown = PLAYER_HIT.knockdownDuration + PLAYER_HIT.knockdownLieDuration;
     const t = this.combat.stateTimer;
-    if (t < PLAYER_HIT.knockdownDuration) {
-      const p = t / PLAYER_HIT.knockdownDuration;
-      this.body.y = this.bodyBaseY + p * 25;
-      this.body.scaleY = 1 - p * 0.6;
-      this.body.scaleX = 1 + p * 0.3;
-      this.head.y = this.headBaseY + p * 30;
-      this.head.scaleY = 1 - p * 0.4;
-    } else {
-      this.body.y = this.bodyBaseY + 25;
-      this.body.scaleY = 0.4;
-      this.body.scaleX = 1.3;
-      this.head.y = this.headBaseY + 30;
-      this.head.scaleY = 0.6;
+    if (this.useSpriteSheet) {
+      this.sprite.play("j-knockdown", true);
+      this.sprite.y = JOHN.height / 2;
+      this.container.scaleX = this.facingRight ? 1 : -1;
     }
     if (t >= totalDown) {
       this.combat.enterRecovering();
@@ -588,20 +577,14 @@ export class JohnPlayer implements PlayerEntity {
     this.iFrameFlashTimer += dt;
     const flash = Math.sin(this.iFrameFlashTimer * 20) > 0;
     this.container.setAlpha(flash ? 1 : 0.3);
-    if (this.combat.stateTimer < 0.2) {
-      const p = this.combat.stateTimer / 0.2;
-      this.body.scaleY = Phaser.Math.Linear(0.4, 1, p);
-      this.body.scaleX = Phaser.Math.Linear(1.3, 1, p);
-      this.body.y = Phaser.Math.Linear(this.bodyBaseY + 25, this.bodyBaseY, p);
-      this.head.y = Phaser.Math.Linear(this.headBaseY + 30, this.headBaseY, p);
-      this.head.scaleY = Phaser.Math.Linear(0.6, 1, p);
-    } else {
-      this.resetPose();
+    if (this.useSpriteSheet) {
+      this.sprite.play("j-recovery", true);
+      this.sprite.y = JOHN.height / 2;
+      this.container.scaleX = this.facingRight ? 1 : -1;
     }
     if (this.combat.stateTimer >= PLAYER_HIT.recoveryDuration) {
       this.combat.toIdle();
       this.container.setAlpha(1);
-      this.resetPose();
     }
   }
 
@@ -781,14 +764,17 @@ export class JohnPlayer implements PlayerEntity {
   }
 
   private applyUltimateVisual(): void {
-    const jOff = this.jumpOffset;
     const dir = this.facingRight ? 1 : -1;
+
+    if (this.useSpriteSheet) {
+      this.sprite.play("j-ultimate", true);
+      this.sprite.y = JOHN.height / 2;
+      this.sprite.setScale(J_SPRITE_SCALE);
+      this.container.scaleX = this.facingRight ? 1 : -1;
+    }
 
     if (this.ultPhase === "setup") {
       const p = Math.min(this.combat.stateTimer / JOHN_ULTIMATE.setupDuration, 1);
-      this.body.x = -dir * p * 8;
-      this.head.y = this.headBaseY - p * 4 + jOff;
-      this.backpack.x = -12 - dir * p * 8;
 
       if (p > 0.3 && !this.nerfGunsSpawned) {
         this.nerfGunsSpawned = true;
@@ -807,9 +793,9 @@ export class JohnPlayer implements PlayerEntity {
 
     if (this.ultPhase === "beam") {
       const pulse = Math.sin(this.combat.stateTimer * 30) * 0.1;
-      this.body.setScale(1 + pulse);
-      this.head.setScale(1 + pulse);
-      this.body.x = -dir * 8;
+      if (this.useSpriteSheet) {
+        this.sprite.setScale(J_SPRITE_SCALE * (1 + pulse));
+      }
       if (this.bazookaObj) {
         this.bazookaObj.x = this.container.x + dir * 40;
         this.bazookaObj.setScale(1.2 + pulse);
@@ -823,11 +809,10 @@ export class JohnPlayer implements PlayerEntity {
     if (this.ultPhase === "recovery") {
       const recStart = JOHN_ULTIMATE.setupDuration + JOHN_ULTIMATE.beamDuration;
       const p = Math.min((this.combat.stateTimer - recStart) / JOHN_ULTIMATE.recoveryDuration, 1);
-      this.body.x = Phaser.Math.Linear(this.body.x, 0, p);
-      this.body.setScale(1);
-      this.head.setScale(1);
-      this.head.y = Phaser.Math.Linear(this.headBaseY - 4, this.headBaseY, p) + jOff;
-      this.backpack.x = Phaser.Math.Linear(this.backpack.x, -12, p);
+      if (this.useSpriteSheet) {
+        this.sprite.setScale(J_SPRITE_SCALE);
+        this.sprite.x = 0;
+      }
       if (this.bazookaObj) {
         this.bazookaObj.setAlpha(1 - p);
         if (p >= 1) { this.bazookaObj.destroy(); this.bazookaObj = null; }
@@ -882,12 +867,13 @@ export class JohnPlayer implements PlayerEntity {
   }
 
   private endUltimate(): void {
-    this.body.setScale(1);
-    this.head.setScale(1);
+    if (this.useSpriteSheet) {
+      this.sprite.setScale(J_SPRITE_SCALE);
+      this.sprite.x = 0;
+    }
     if (this.bazookaObj) { this.bazookaObj.destroy(); this.bazookaObj = null; }
     this.destroyNerfGuns();
     this.nerfGunsSpawned = false;
-    this.resetPose();
     this.combat.toIdle();
   }
 
@@ -1013,15 +999,9 @@ export class JohnPlayer implements PlayerEntity {
   private onDryFire(): void {
     this.hitFeel.shake(1, 20);
     const dir = this.facingRight ? 1 : -1;
-    const puff = this.scene.add.circle(
-      this.container.x + dir * 15, this.container.y - 10,
-      6, 0x888888, 0.5,
-    );
-    puff.setDepth(this.container.y + 2);
-    this.scene.tweens.add({
-      targets: puff, alpha: 0, scaleX: 2, scaleY: 2,
-      duration: 200, onComplete: () => puff.destroy(),
-    });
+    const x = this.container.x + dir * 15;
+    const y = this.container.y - 10;
+    this.hitFeel.vfx.flashBurst(x, y, 0x888888, 2);
   }
 
   private onAttackEnd(): void {
@@ -1090,40 +1070,48 @@ export class JohnPlayer implements PlayerEntity {
 
   private applyVisualState(): void {
     const s = this.combat;
-    const jOff = this.jumpOffset;
-    this.body.y = this.bodyBaseY + jOff;
-    this.head.y = this.headBaseY + jOff;
-    this.backpack.y = -5 + jOff;
-    this.nameTag.y = -JOHN.height / 2 - 32 + jOff;
-    this.shadow.scaleX = 1 - Math.abs(jOff) / 300;
-    this.shadow.scaleY = 1 - Math.abs(jOff) / 300;
+    if (!this.useSpriteSheet) return;
 
-    if (s.isAirAttacking) this.applyAirAttackPose();
-    else if (s.isThrowing) this.applyThrowPose();
-    else if (s.isDashAttacking) this.applyDashAttackPose();
-    else if (s.isDashing) this.applyDashPose();
-    else if (s.isAttacking && this.currentMove) this.applyJohnAttackPose();
-    else this.resetPose();
-  }
+    this.sprite.y = JOHN.height / 2 + this.jumpOffset;
+    this.shadow.scaleX = 1 - Math.abs(this.jumpOffset) / 300;
+    this.shadow.scaleY = 1 - Math.abs(this.jumpOffset) / 300;
+    this.nameTag.y = -JOHN.height / 2 - 62 + this.jumpOffset;
 
-  private applyAirAttackPose(): void {
-    const jOff = this.jumpOffset;
-    this.body.y = this.bodyBaseY + jOff;
-    this.body.scaleX = 1.2; this.body.scaleY = 0.8;
-    this.head.y = this.headBaseY + 5 + jOff;
-    this.head.x = 0;
-  }
-
-  private applyThrowPose(): void {
-    if (this.throwPhase === "grab") {
-      const p = Math.min(this.combat.stateTimer / THROW.grabDuration, 1);
-      this.body.scaleX = 1 + p * 0.1;
+    if (s.isAirAttacking) {
+      this.sprite.play("j-air-attack", true);
+    } else if (s.isThrowing) {
+      this.sprite.play("j-grab", true);
+    } else if (s.isDashAttacking) {
+      this.sprite.play("j-bat-lunge", true);
+    } else if (s.isDashing) {
+      this.sprite.play("j-dash", true);
+    } else if (s.isAttacking && this.currentMove) {
+      this.applyJohnAttackAnim();
+    } else if (s.isJumping) {
+      this.sprite.play("j-jump", true);
+    } else if (s.state === "walk") {
+      this.sprite.play("j-walk", true);
     } else {
-      const p = Math.min(this.combat.stateTimer / THROW.throwDuration, 1);
-      const swing = Math.sin(p * Math.PI);
-      this.body.scaleX = 1 + swing * 0.15;
-      this.body.scaleY = 1 - swing * 0.1;
-      this.head.x = swing * 8;
+      this.sprite.play("j-idle", true);
+    }
+    this.sprite.setScale(J_SPRITE_SCALE);
+    this.container.scaleX = this.facingRight ? 1 : -1;
+  }
+
+  private applyJohnAttackAnim(): void {
+    if (!this.currentMove) return;
+    const move = this.currentMove;
+
+    if (move.moveType === "rush") {
+      this.sprite.play("j-bat-lunge", true);
+    } else if (move.moveType === "aoe") {
+      this.sprite.play("j-ground-slam", true);
+    } else if (move.moveType === "projectile") {
+      this.sprite.play("j-slingshot", true);
+    } else if (move.dir === "up") {
+      this.sprite.play("j-bat-upper", true);
+    } else {
+      this.sprite.play("j-bat-jab", true);
     }
   }
 
@@ -1162,88 +1150,42 @@ export class JohnPlayer implements PlayerEntity {
   }
 
   private applyParryPose(): void {
-    this.body.y = this.bodyBaseY + 4;
-    this.body.scaleX = 1.15;
-    this.body.scaleY = 0.9;
-    this.head.y = this.headBaseY + 6;
-    this.backpack.y = -1;
-    const flash = Math.sin(this.combat.stateTimer * 40) > 0;
-    this.body.setFillStyle(flash ? 0xffffff : COLORS.johnFill);
-  }
-
-  private applyGuardPose(): void {
-    this.body.y = this.bodyBaseY + 5;
-    this.body.scaleX = 1.12;
-    this.body.scaleY = 0.88;
-    this.head.y = this.headBaseY + 7;
-    this.head.x = 0;
-    this.backpack.y = 0;
-    this.body.setFillStyle(0x4a7a2a);
-  }
-
-  private applyDashPose(): void {
-    this.body.scaleX = 1.3; this.body.scaleY = 0.85;
-    this.head.x = this.dashDir * 5;
-  }
-
-  private applyDashAttackPose(): void {
-    const p = Math.min(this.combat.stateTimer / DASH.attackDuration, 1);
-    const swing = Math.sin(p * Math.PI);
-    if (this.dashAttackType === "heavy") {
-      this.body.scaleX = 1.2 + swing * 0.15;
-      this.body.scaleY = 1 - swing * 0.15;
-      this.head.x = this.dashDir * swing * 10;
-      this.head.y = this.headBaseY - swing * 3;
-    } else {
-      this.body.scaleX = 1.1;
-      this.head.x = swing * 6;
+    if (this.useSpriteSheet) {
+      this.sprite.play("j-parry", true);
+      this.sprite.y = JOHN.height / 2;
+      this.sprite.setScale(J_SPRITE_SCALE);
+      const flash = Math.sin(this.combat.stateTimer * 40) > 0;
+      this.sprite.setAlpha(flash ? 1 : 0.7);
+      this.container.scaleX = this.facingRight ? 1 : -1;
+      return;
     }
   }
 
-  private applyJohnAttackPose(): void {
-    if (!this.currentMove) return;
-    const move = this.currentMove;
-    const p = Math.min(this.combat.stateTimer / move.duration, 1);
-    const swing = Math.sin(p * Math.PI);
-    const jOff = this.jumpOffset;
-
-    if (move.moveType === "rush") {
-      this.body.scaleX = 1 + swing * 0.18;
-      this.body.scaleY = 1 - swing * 0.1;
-      this.head.x = swing * 6;
-      this.head.y = this.headBaseY + swing * 2 + jOff;
-    } else if (move.moveType === "aoe") {
-      const rise = p < 0.5 ? swing * 10 : 0;
-      const slam = p >= 0.5 ? (p - 0.5) * 2 : 0;
-      this.body.scaleY = 1 - slam * 0.25;
-      this.body.scaleX = 1 + slam * 0.15;
-      this.head.y = this.headBaseY - rise + jOff;
-      this.body.y = this.bodyBaseY + slam * 5 + jOff;
-    } else if (move.button === "H") {
-      this.body.scaleX = 1 + swing * 0.08;
-      this.head.x = swing * 4;
-      this.head.y = this.headBaseY - swing * 2 + jOff;
-    } else {
-      const lunge = swing * 10;
-      this.body.scaleX = 1 + swing * 0.1;
-      this.body.scaleY = 1 - swing * 0.12;
-      this.head.x = lunge * 0.4;
-      this.head.y = this.headBaseY - lunge * 0.2 + jOff;
+  private applyGuardPose(): void {
+    if (this.useSpriteSheet) {
+      this.sprite.play("j-guard", true);
+      this.sprite.y = JOHN.height / 2;
+      this.sprite.setScale(J_SPRITE_SCALE);
+      this.container.scaleX = this.facingRight ? 1 : -1;
+      return;
     }
   }
 
   private applyHitstopVisual(): void {
-    const shake = (Math.random() - 0.5) * 3;
-    this.body.x = shake; this.head.x = shake;
+    if (this.useSpriteSheet) {
+      const shake = (Math.random() - 0.5) * 4;
+      this.sprite.x = shake;
+      return;
+    }
   }
 
   private resetPose(): void {
-    this.body.y = this.bodyBaseY + this.jumpOffset;
-    this.body.scaleX = 1; this.body.scaleY = 1; this.body.x = 0;
-    this.body.setFillStyle(COLORS.johnFill);
-    this.head.y = this.headBaseY + this.jumpOffset;
-    this.head.x = 0; this.head.scaleY = 1;
-    this.backpack.x = -12; this.backpack.y = -5 + this.jumpOffset;
+    if (this.useSpriteSheet) {
+      this.sprite.x = 0;
+      this.sprite.y = JOHN.height / 2;
+      this.sprite.setScale(J_SPRITE_SCALE);
+      this.sprite.setAlpha(1);
+    }
   }
 
   private clampToBounds(): void {

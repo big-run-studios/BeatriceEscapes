@@ -11,6 +11,7 @@ import { BoonState } from "../systems/BoonState";
 import { ProjectileSpawnRequest, MeleeHitBox, AoeHit } from "./Player";
 import { TrainingDummy } from "./TrainingDummy";
 import { PlayerEntity } from "./PlayerEntity";
+import { LD_SHEET_KEY, LL_SHEET_KEY, LD_SPRITE_SCALE, LL_SPRITE_SCALE } from "./LunaAnims";
 
 const HP_BAR_W = 40;
 const HP_BAR_H = 4;
@@ -25,23 +26,9 @@ export class LunaPlayer implements PlayerEntity {
   readonly container: Phaser.GameObjects.Container;
   readonly combat: CombatStateMachine;
 
-  // Dog visuals
-  private dogBody: Phaser.GameObjects.Rectangle;
-  private dogHead: Phaser.GameObjects.Ellipse;
-  private dogEarL: Phaser.GameObjects.Rectangle;
-  private dogEarR: Phaser.GameObjects.Rectangle;
-  private dogTail: Phaser.GameObjects.Rectangle;
-  private dogNose: Phaser.GameObjects.Rectangle;
-
-  // Lunar visuals
-  private lunarBody: Phaser.GameObjects.Rectangle;
-  private lunarHead: Phaser.GameObjects.Rectangle;
-  private lunarEyeL: Phaser.GameObjects.Ellipse;
-  private lunarEyeR: Phaser.GameObjects.Ellipse;
-  private lunarClawL: Phaser.GameObjects.Rectangle;
-  private lunarClawR: Phaser.GameObjects.Rectangle;
-  private lunarMane: Phaser.GameObjects.Ellipse;
-
+  private dogSprite: Phaser.GameObjects.Sprite;
+  private lunarSprite: Phaser.GameObjects.Sprite;
+  private useSpriteSheet: boolean;
   private shadow: Phaser.GameObjects.Ellipse;
 
   private hpBarBg: Phaser.GameObjects.Rectangle;
@@ -69,9 +56,6 @@ export class LunaPlayer implements PlayerEntity {
   currentMode: LunaMode = "dog";
   momentum = 0;
   private momentumDecayDelay = 0;
-
-  private bodyBaseY = 0;
-  private headBaseY: number;
 
   private jumpOffset = 0;
   private jumpVelocity = 0;
@@ -119,41 +103,29 @@ export class LunaPlayer implements PlayerEntity {
     this.hitFeel = hitFeel;
     this.combat = new CombatStateMachine();
 
-    const DW = LUNA.width;
     const DH = LUNA.height;
-    const LW = LUNA.lunarWidth;
-    const LH = LUNA.lunarHeight;
 
-    this.shadow = scene.add.ellipse(0, DH / 2 + 4, DW + 14, 12, 0x000000, 0.3);
+    this.shadow = scene.add.ellipse(0, DH / 2 + 4, LUNA.width + 14, 12, 0x000000, 0.3);
 
-    // Dog parts
-    this.dogBody = scene.add.rectangle(0, 0, DW, DH, LUNA_COLORS.dogBody);
-    this.dogBody.setStrokeStyle(2, 0x333333);
-    this.dogHead = scene.add.ellipse(DW * 0.35, -DH / 2 - 6, 22, 18, LUNA_COLORS.dogHead);
-    this.dogHead.setStrokeStyle(1, 0x333333);
-    this.dogEarL = scene.add.rectangle(DW * 0.2, -DH / 2 - 14, 6, 10, LUNA_COLORS.dogEars);
-    this.dogEarR = scene.add.rectangle(DW * 0.5, -DH / 2 - 14, 6, 10, LUNA_COLORS.dogEars);
-    this.dogNose = scene.add.rectangle(DW * 0.55, -DH / 2 - 6, 5, 3, LUNA_COLORS.dogNose);
-    this.dogTail = scene.add.rectangle(-DW / 2 - 6, -DH / 4, 4, 14, LUNA_COLORS.dogTail);
-    this.dogTail.setAngle(-30);
+    this.useSpriteSheet = scene.textures.exists(LD_SHEET_KEY) && scene.textures.exists(LL_SHEET_KEY);
 
-    // Lunar parts (hidden initially)
-    this.lunarBody = scene.add.rectangle(0, -(LH - DH) / 2, LW, LH, LUNA_COLORS.lunarBody);
-    this.lunarBody.setStrokeStyle(2, LUNA_COLORS.lunarOutline);
-    this.lunarBody.setAlpha(0);
-    this.lunarHead = scene.add.rectangle(0, -(LH - DH) / 2 - LH / 2 - 12, LW * 0.6, 22, LUNA_COLORS.lunarBody);
-    this.lunarHead.setStrokeStyle(2, LUNA_COLORS.lunarOutline);
-    this.lunarHead.setAlpha(0);
-    this.lunarMane = scene.add.ellipse(0, -(LH - DH) / 2 - LH / 2, LW * 0.8, 16, LUNA_COLORS.lunarMane);
-    this.lunarMane.setAlpha(0);
-    this.lunarEyeL = scene.add.ellipse(-5, -(LH - DH) / 2 - LH / 2 - 12, 4, 3, LUNA_COLORS.lunarEyes);
-    this.lunarEyeL.setAlpha(0);
-    this.lunarEyeR = scene.add.ellipse(5, -(LH - DH) / 2 - LH / 2 - 12, 4, 3, LUNA_COLORS.lunarEyes);
-    this.lunarEyeR.setAlpha(0);
-    this.lunarClawL = scene.add.rectangle(-LW / 2 - 4, -(LH - DH) / 2 + 5, 6, 16, LUNA_COLORS.lunarClaws);
-    this.lunarClawL.setAlpha(0);
-    this.lunarClawR = scene.add.rectangle(LW / 2 + 4, -(LH - DH) / 2 + 5, 6, 16, LUNA_COLORS.lunarClaws);
-    this.lunarClawR.setAlpha(0);
+    if (this.useSpriteSheet) {
+      this.dogSprite = scene.add.sprite(0, 0, LD_SHEET_KEY, 0);
+      this.dogSprite.setOrigin(0.5, 1.0);
+      this.dogSprite.setScale(LD_SPRITE_SCALE);
+      this.dogSprite.y = DH / 2 + 4;
+
+      this.lunarSprite = scene.add.sprite(0, 0, LL_SHEET_KEY, 0);
+      this.lunarSprite.setOrigin(0.5, 1.0);
+      this.lunarSprite.setScale(LL_SPRITE_SCALE);
+      this.lunarSprite.y = DH / 2 + 4;
+      this.lunarSprite.setAlpha(0);
+    } else {
+      this.dogSprite = scene.add.sprite(0, 0, "__DEFAULT");
+      this.dogSprite.setVisible(false);
+      this.lunarSprite = scene.add.sprite(0, 0, "__DEFAULT");
+      this.lunarSprite.setVisible(false);
+    }
 
     const barY = DH / 2 + 14;
     this.hpBarBg = scene.add.rectangle(0, barY, HP_BAR_W, HP_BAR_H, 0x1a1a1a);
@@ -167,15 +139,10 @@ export class LunaPlayer implements PlayerEntity {
     });
 
     this.container = scene.add.container(x, y, [
-      this.shadow,
-      this.dogBody, this.dogHead, this.dogEarL, this.dogEarR, this.dogNose, this.dogTail,
-      this.lunarBody, this.lunarHead, this.lunarMane, this.lunarEyeL, this.lunarEyeR, this.lunarClawL, this.lunarClawR,
+      this.shadow, this.dogSprite, this.lunarSprite,
       this.hpBarBg, this.hpBarFill, this.mpBarBg, this.mpBarFill,
       this.momBarBg, this.momBarFill, this.statusIconText,
     ]);
-
-    this.bodyBaseY = 0;
-    this.headBaseY = -DH / 2 - 6;
   }
 
   get x(): number { return this.container.x; }
@@ -206,10 +173,6 @@ export class LunaPlayer implements PlayerEntity {
 
   private get activeWidth(): number {
     return this.currentMode === "lunar" ? LUNA.lunarWidth : LUNA.width;
-  }
-
-  private get activeHeight(): number {
-    return this.currentMode === "lunar" ? LUNA.lunarHeight : LUNA.height;
   }
 
   private get activeSpeed(): number {
@@ -245,23 +208,14 @@ export class LunaPlayer implements PlayerEntity {
     this.modeTransitionTimer = 0.15;
     this.applyModeVisuals();
 
-    const flash = this.scene.add.circle(this.container.x, this.container.y - 20, 30, LUNA_COLORS.modeFlash, 0.6);
-    flash.setDepth(this.container.y + 200);
-    this.scene.tweens.add({
-      targets: flash,
-      alpha: 0, scaleX: 2.5, scaleY: 2.5,
-      duration: 200,
-      onComplete: () => flash.destroy(),
-    });
+    this.hitFeel.vfx.flashBurst(this.container.x, this.container.y - 20, LUNA_COLORS.modeFlash, 6);
   }
 
   private applyModeVisuals(): void {
+    if (!this.useSpriteSheet) return;
     const isDog = this.currentMode === "dog";
-    const dogAlpha = isDog ? 1 : 0;
-    const lunarAlpha = isDog ? 0 : 1;
-
-    this.scene.tweens.add({ targets: [this.dogBody, this.dogHead, this.dogEarL, this.dogEarR, this.dogNose, this.dogTail], alpha: dogAlpha, duration: 100 });
-    this.scene.tweens.add({ targets: [this.lunarBody, this.lunarHead, this.lunarMane, this.lunarEyeL, this.lunarEyeR, this.lunarClawL, this.lunarClawR], alpha: lunarAlpha, duration: 100 });
+    this.scene.tweens.add({ targets: this.dogSprite, alpha: isDog ? 1 : 0, duration: 100 });
+    this.scene.tweens.add({ targets: this.lunarSprite, alpha: isDog ? 0 : 1, duration: 100 });
   }
 
   // ── Momentum ──
@@ -286,7 +240,7 @@ export class LunaPlayer implements PlayerEntity {
   // ── Update Loop ──
 
   update(dt: number): void {
-    if (this.isDead) return;
+    if (this.isDead || !this.container?.scene) return;
     this.combat.update(dt);
     this.regenMp(dt);
     this.updateMomentum(dt);
@@ -774,6 +728,9 @@ export class LunaPlayer implements PlayerEntity {
   }
 
   private handleFrenzyPhase(_dt: number): void {
+    if (this.useSpriteSheet && this.currentMode === "lunar") {
+      this.lunarSprite.play("ll-frenzy", true);
+    }
     const interval = LUNA_ULTIMATE.frenzyDuration / LUNA_ULTIMATE.frenzyHits;
     if (this.ultFrenzyTimer >= interval * (this.ultHitsDealt + 1)) {
       const lunarMult = this.currentMode === "lunar" ? 1.5 : 1.0;
@@ -788,32 +745,26 @@ export class LunaPlayer implements PlayerEntity {
       this.spawnAfterimage();
 
       const slashColor = this.currentMode === "lunar" ? LUNA_COLORS.lunarClaws : LUNA_COLORS.dogEyes;
-      const slash = this.scene.add.rectangle(biteX, this.container.y - 5, 18, 4, slashColor, 0.8);
-      slash.setAngle(dir * -30 + (Math.random() - 0.5) * 40);
-      slash.setDepth(this.container.y + 50);
-      this.scene.tweens.add({
-        targets: slash, alpha: 0, scaleX: 2.5, scaleY: 0.3,
-        duration: 150, onComplete: () => slash.destroy(),
-      });
+      this.hitFeel.vfx.flashBurst(biteX, this.container.y - 5, slashColor, 2);
     }
   }
 
   private applyUltSetupVisual(): void {
+    if (this.useSpriteSheet) {
+      this.activeSprite.play(`${this.modePrefix}-ultimate`, true);
+    }
     const progress = this.combat.stateTimer / LUNA_ULTIMATE.setupDuration;
     const dirScale = this.facingRight ? 1 : -1;
     const scale = 1 + progress * 0.15;
     this.container.setScale(dirScale * scale, scale);
 
     if (progress > 0.2 && Math.random() < 0.15) {
-      const ring = this.scene.add.circle(this.container.x, this.container.y - 20, 12, LUNA_COLORS.modeFlash, 0.5);
-      ring.setDepth(this.container.y + 100);
-      ring.setStrokeStyle(2, LUNA_COLORS.lunarEyes);
-      this.scene.tweens.add({
-        targets: ring,
-        scaleX: 5 + progress * 3, scaleY: 3 + progress * 2, alpha: 0,
-        duration: 350,
-        onComplete: () => ring.destroy(),
-      });
+      this.hitFeel.vfx.magicSparkle(
+        this.container.x,
+        this.container.y - 20,
+        LUNA_COLORS.modeFlash,
+        2,
+      );
     }
 
     if (progress > 0.7) {
@@ -832,85 +783,105 @@ export class LunaPlayer implements PlayerEntity {
 
   // ── Visual Helpers ──
 
-  private applyVisualState(): void {
-    const dir = this.facingRight ? 1 : -1;
-    this.container.scaleX = dir;
+  private static readonly DOG_MOVE_ANIM: Record<string, string> = {
+    "Quick Bite": "ld-quick-bite",
+    "Bark Push": "ld-bark-push",
+    "Dash Tackle": "ld-dash-tackle",
+    "Pounce": "ld-pounce",
+    "Air Snap": "ld-air-snap",
+    "Leaping Bite": "ld-leaping-bite",
+    "Tail Sweep": "ld-tail-sweep",
+    "Dig Fling": "ld-dig-fling",
+    "Dodge Nip": "ld-dodge-nip",
+    "Moonrise": "ld-moonrise",
+  };
 
-    if (this.combat.isAttacking && this.currentMove) {
-      const t = this.combat.stateTimer / this.currentMove.duration;
-      if (this.currentMode === "dog") {
-        this.dogBody.y = this.bodyBaseY + Math.sin(t * Math.PI) * -3;
-        this.dogHead.y = this.headBaseY + Math.sin(t * Math.PI) * -5;
-      } else {
-        this.lunarBody.y = -(LUNA.lunarHeight - LUNA.height) / 2 + Math.sin(t * Math.PI) * -5;
-      }
-    } else {
-      if (this.currentMode === "dog") {
-        this.dogBody.y = this.bodyBaseY;
-        this.dogHead.y = this.headBaseY;
-      } else {
-        this.lunarBody.y = -(LUNA.lunarHeight - LUNA.height) / 2;
-      }
-    }
+  private static readonly LUNAR_MOVE_ANIM: Record<string, string> = {
+    "Claw Swipe": "ll-claw-swipe",
+    "Heavy Slam": "ll-heavy-slam",
+    "Rushing Claws": "ll-rushing-claws",
+    "Lunging Uppercut": "ll-lunging-upper",
+    "Rising Slash": "ll-rising-slash",
+    "Sky Crash": "ll-sky-crash",
+    "Low Sweep": "ll-low-sweep",
+    "Ground Pound": "ll-ground-pound",
+    "Counter Slash": "ll-counter-slash",
+    "Revert Burst": "ll-revert-burst",
+  };
+
+  private get activeSprite(): Phaser.GameObjects.Sprite {
+    return this.currentMode === "dog" ? this.dogSprite : this.lunarSprite;
+  }
+
+  private get modePrefix(): string {
+    return this.currentMode === "dog" ? "ld" : "ll";
+  }
+
+  private applyVisualState(): void {
+    if (!this.useSpriteSheet) return;
+
+    this.container.scaleX = this.facingRight ? 1 : -1;
+
+    const DH = LUNA.height;
+    const jOff = this.jumpOffset;
+    const sprite = this.activeSprite;
+    sprite.y = DH / 2 + 4 + jOff;
 
     if (this.combat.isJumping || this.combat.isAirAttacking) {
       this.shadow.setAlpha(0.15);
-      if (this.currentMode === "dog") {
-        this.dogBody.y = this.bodyBaseY + this.jumpOffset;
-        this.dogHead.y = this.headBaseY + this.jumpOffset;
-        this.dogEarL.y = -LUNA.height / 2 - 14 + this.jumpOffset;
-        this.dogEarR.y = -LUNA.height / 2 - 14 + this.jumpOffset;
-        this.dogNose.y = -LUNA.height / 2 - 6 + this.jumpOffset;
-        this.dogTail.y = -LUNA.height / 4 + this.jumpOffset;
-      } else {
-        const off = -(LUNA.lunarHeight - LUNA.height) / 2;
-        this.lunarBody.y = off + this.jumpOffset;
-        this.lunarHead.y = off - LUNA.lunarHeight / 2 - 12 + this.jumpOffset;
-        this.lunarMane.y = off - LUNA.lunarHeight / 2 + this.jumpOffset;
-        this.lunarEyeL.y = off - LUNA.lunarHeight / 2 - 12 + this.jumpOffset;
-        this.lunarEyeR.y = off - LUNA.lunarHeight / 2 - 12 + this.jumpOffset;
-        this.lunarClawL.y = off + 5 + this.jumpOffset;
-        this.lunarClawR.y = off + 5 + this.jumpOffset;
-      }
     } else {
       this.shadow.setAlpha(0.3);
+    }
+
+    if (this.combat.isAttacking && this.currentMove) {
+      const map = this.currentMode === "dog" ? LunaPlayer.DOG_MOVE_ANIM : LunaPlayer.LUNAR_MOVE_ANIM;
+      const anim = map[this.currentMove.name];
+      if (anim) {
+        sprite.play(anim, true);
+      } else {
+        sprite.play(`${this.modePrefix}-idle`, true);
+      }
+    } else if (this.combat.isDashing) {
+      sprite.play(`${this.modePrefix}-dash`, true);
+    } else if (this.combat.isDashAttacking) {
+      sprite.play(`${this.modePrefix}-dash-attack`, true);
+    } else if (this.combat.isJumping) {
+      sprite.play(`${this.modePrefix}-jump`, true);
+    } else if (this.combat.isAirAttacking) {
+      sprite.play(`${this.modePrefix}-air-attack`, true);
+    } else {
+      const vel = Math.abs(this.prevMoveX);
+      if (vel > 0.7) {
+        sprite.play(`${this.modePrefix}-run`, true);
+      } else if (vel > 0.1) {
+        sprite.play(`${this.modePrefix}-walk`, true);
+      } else {
+        sprite.play(`${this.modePrefix}-idle`, true);
+      }
     }
   }
 
   private applyHitstopVisual(): void {
+    if (!this.useSpriteSheet) return;
     const shake = (Math.random() - 0.5) * 3;
-    if (this.currentMode === "dog") {
-      this.dogBody.x = shake;
-      this.dogHead.x = LUNA.width * 0.35 + shake;
-    } else {
-      this.lunarBody.x = shake;
-      this.lunarHead.x = shake;
-    }
+    this.activeSprite.x = shake;
   }
 
   private resetPose(): void {
+    if (!this.useSpriteSheet) return;
     this.container.setScale(this.facingRight ? 1 : -1, 1);
-    if (this.currentMode === "dog") {
-      this.dogBody.x = 0;
-      this.dogBody.y = this.bodyBaseY;
-      this.dogHead.x = LUNA.width * 0.35;
-      this.dogHead.y = this.headBaseY;
-    } else {
-      this.lunarBody.x = 0;
-      this.lunarHead.x = 0;
-    }
+    this.dogSprite.x = 0;
+    this.dogSprite.y = LUNA.height / 2 + 4;
+    this.dogSprite.setScale(LD_SPRITE_SCALE);
+    this.dogSprite.setAlpha(this.currentMode === "dog" ? 1 : 0);
+    this.lunarSprite.x = 0;
+    this.lunarSprite.y = LUNA.height / 2 + 4;
+    this.lunarSprite.setScale(LL_SPRITE_SCALE);
+    this.lunarSprite.setAlpha(this.currentMode === "lunar" ? 1 : 0);
   }
 
   private spawnAfterimage(): void {
-    const c = this.currentMode === "lunar" ? LUNA_COLORS.lunarOutline : LUNA_COLORS.dogBody;
-    const w = this.activeWidth;
-    const h = this.activeHeight;
-    const ghost = this.scene.add.rectangle(this.container.x, this.container.y - h * 0.3, w, h, c, 0.3);
-    ghost.setDepth(this.container.y - 1);
-    this.scene.tweens.add({
-      targets: ghost, alpha: 0, duration: 200,
-      onComplete: () => ghost.destroy(),
-    });
+    this.hitFeel.vfx.dashDust(this.container.x, this.container.y);
   }
 
   private fireSwingVFX(move: LunaMoveDef): void {
@@ -930,30 +901,19 @@ export class LunaPlayer implements PlayerEntity {
   }
 
   private onDryFire(): void {
-    const puff = this.scene.add.circle(
-      this.container.x + (this.facingRight ? 20 : -20),
-      this.container.y - 10, 6, 0x888888, 0.5,
-    );
-    puff.setDepth(this.container.y + 10);
-    this.scene.tweens.add({
-      targets: puff, alpha: 0, scaleX: 2, scaleY: 2,
-      duration: 200, onComplete: () => puff.destroy(),
-    });
+    const x = this.container.x + (this.facingRight ? 20 : -20);
+    const y = this.container.y - 10;
+    this.hitFeel.vfx.flashBurst(x, y, 0x888888, 2);
   }
 
   // ── Hitstun / Knockdown ──
 
   private handleHitstun(dt: number): void {
     this.applyKnockback(dt);
-    const shake = (Math.random() - 0.5) * 4;
-    if (this.currentMode === "dog") {
-      this.dogBody.x = shake;
-      this.dogHead.x = LUNA.width * 0.35 + shake;
-      this.dogBody.y = this.bodyBaseY;
-      this.dogHead.y = this.headBaseY;
-    } else {
-      this.lunarBody.x = shake;
-      this.lunarHead.x = shake;
+    if (this.useSpriteSheet) {
+      const shake = (Math.random() - 0.5) * 4;
+      this.activeSprite.x = shake;
+      this.activeSprite.play(`${this.modePrefix}-hit`, true);
     }
     if (this.combat.stateTimer >= PLAYER_HIT.hitstunDuration) {
       this.combat.toIdle();
@@ -963,33 +923,20 @@ export class LunaPlayer implements PlayerEntity {
 
   private handleKnockdown(dt: number): void {
     this.applyKnockback(dt);
-    const totalDown = PLAYER_HIT.knockdownDuration + PLAYER_HIT.knockdownLieDuration;
-    const t = this.combat.stateTimer;
-    if (t < PLAYER_HIT.knockdownDuration) {
-      const p = t / PLAYER_HIT.knockdownDuration;
-      if (this.currentMode === "dog") {
-        this.dogBody.y = this.bodyBaseY + p * 20;
-        this.dogBody.scaleY = 1 - p * 0.5;
-        this.dogBody.scaleX = 1 + p * 0.3;
-      } else {
-        const off = -(LUNA.lunarHeight - LUNA.height) / 2;
-        this.lunarBody.y = off + p * 30;
-        this.lunarBody.scaleY = 1 - p * 0.6;
-        this.lunarBody.scaleX = 1 + p * 0.3;
-      }
+    if (this.useSpriteSheet) {
+      this.activeSprite.play(`${this.modePrefix}-knockdown`, true);
     }
-    if (t >= totalDown) {
+    const totalDown = PLAYER_HIT.knockdownDuration + PLAYER_HIT.knockdownLieDuration;
+    if (this.combat.stateTimer >= totalDown) {
       this.combat.toIdle();
       this.resetPose();
-      if (this.currentMode === "dog") {
-        this.dogBody.scaleX = 1; this.dogBody.scaleY = 1;
-      } else {
-        this.lunarBody.scaleX = 1; this.lunarBody.scaleY = 1;
-      }
     }
   }
 
   private handleRecovery(_dt: number): void {
+    if (this.useSpriteSheet) {
+      this.activeSprite.play(`${this.modePrefix}-recovery`, true);
+    }
     if (this.combat.stateTimer >= 0.3) {
       this.combat.toIdle();
       this.resetPose();

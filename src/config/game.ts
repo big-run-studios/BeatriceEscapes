@@ -1,3 +1,5 @@
+import type { TrailType } from "../entities/Projectile";
+
 export const GAME_WIDTH = 1280;
 export const GAME_HEIGHT = 720;
 
@@ -48,15 +50,15 @@ export interface ComboNode {
   shakeIntensity: number;
   shakeDuration: number;
   mpCost?: number;
-  projectile?: { radius: number; speed: number; color: number; maxRange: number };
+  projectile?: { radius: number; speed: number; color: number; maxRange: number; trailType?: TrailType };
   rush?: { speed: number; duration: number };
   burstCount?: number;
   children: ComboNode[];
 }
 
-const PROJ_SMALL = { radius: 8, speed: 500, color: 0x88ccff, maxRange: 400 };
-const PROJ_MEDIUM = { radius: 14, speed: 400, color: 0x55aaff, maxRange: 450 };
-const PROJ_BLAST = { radius: 16, speed: 350, color: 0xffcc44, maxRange: 500 };
+const PROJ_SMALL = { radius: 8, speed: 500, color: 0x88ccff, maxRange: 400, trailType: "wind" as const };
+const PROJ_MEDIUM = { radius: 14, speed: 400, color: 0x55aaff, maxRange: 450, trailType: "wind-heavy" as const };
+const PROJ_BLAST = { radius: 16, speed: 350, color: 0xffcc44, maxRange: 500, trailType: "blast" as const };
 
 export const COMBO_TREE: ComboNode[] = [
   // ── Square (L) branch: Bea wind shots (chip pokes, low damage) ──
@@ -510,7 +512,7 @@ export interface JohnMoveDef {
   hitFrame: number;
   mpCost: number;
   moveType: "melee" | "projectile" | "aoe" | "rush";
-  projectile?: { radius: number; speed: number; color: number; maxRange: number };
+  projectile?: { radius: number; speed: number; color: number; maxRange: number; trailType?: TrailType };
   aoeRadius?: number;
   rushSpeed?: number;
   rushDuration?: number;
@@ -531,7 +533,7 @@ export const JOHN_MOVES: JohnMoveDef[] = [
     shakeIntensity: 1, shakeDuration: 30,
     duration: 0.25, hitFrame: 0.1, mpCost: 6,
     moveType: "projectile",
-    projectile: { radius: 6, speed: 550, color: 0x998866, maxRange: 400 },
+    projectile: { radius: 6, speed: 550, color: 0x998866, maxRange: 400, trailType: "sling" as const },
   },
 
   // ── Forward (advancing / aggressive) ──
@@ -548,7 +550,7 @@ export const JOHN_MOVES: JohnMoveDef[] = [
     shakeIntensity: 3, shakeDuration: 60,
     duration: 0.35, hitFrame: 0.12, mpCost: 10,
     moveType: "projectile",
-    projectile: { radius: 12, speed: 450, color: 0x44ddaa, maxRange: 450 },
+    projectile: { radius: 12, speed: 450, color: 0x44ddaa, maxRange: 450, trailType: "marble" as const },
   },
 
   // ── Up (launcher / anti-air) ──
@@ -565,7 +567,7 @@ export const JOHN_MOVES: JohnMoveDef[] = [
     shakeIntensity: 3, shakeDuration: 50,
     duration: 0.38, hitFrame: 0.18, mpCost: 8,
     moveType: "projectile",
-    projectile: { radius: 8, speed: 400, color: 0xee5533, maxRange: 500 },
+    projectile: { radius: 8, speed: 400, color: 0xee5533, maxRange: 500, trailType: "rocket" as const },
   },
 
   // ── Down (ground / AoE) ──

@@ -157,6 +157,9 @@ export class Player {
   get beaWorldY(): number {
     return this.container.y - PLAYER.height / 2 - 28 + this.jumpOffset;
   }
+  private get chestY(): number {
+    return this.container.y - PLAYER.height * 0.45 + this.jumpOffset;
+  }
 
   setDummyProvider(fn: () => TrainingDummy[]): void { this.getDummies = fn; }
   setBoonState(bs: BoonState): void { this.boonState = bs; }
@@ -196,7 +199,7 @@ export class Player {
   }
 
   update(dt: number): void {
-    if (this.isDead) return;
+    if (this.isDead || !this.container?.scene) return;
 
     this.combat.update(dt);
     this.regenMp(dt);
@@ -455,13 +458,14 @@ export class Player {
           this.mp -= DASH.lightMpCost;
           this.pendingProjectiles.push({
             x: this.container.x,
-            y: this.beaWorldY,
+            y: this.chestY,
             facingRight: this.facingRight,
             config: {
               radius: 12, speed: 600, color: 0x88ccff, maxRange: 350,
               damage: DASH.lightDamage, knockback: DASH.lightKnockback,
               hitstopMs: DASH.lightHitstopMs,
               shakeIntensity: DASH.lightShakeIntensity, shakeDuration: DASH.lightShakeDuration,
+              trailType: "wind",
             },
           });
         } else {
@@ -908,21 +912,16 @@ export class Player {
 
   private onDryFire(): void {
     this.hitFeel.shake(1, 20);
-    const puff = this.scene.add.circle(
-      this.beaWorldX + (this.facingRight ? 15 : -15), this.beaWorldY,
-      6, 0x888888, 0.5,
+    this.hitFeel.vfx.flashBurst(
+      this.beaWorldX + (this.facingRight ? 15 : -15),
+      this.beaWorldY, 0x888888, 2,
     );
-    puff.setDepth(this.container.y + 2);
-    this.scene.tweens.add({
-      targets: puff, alpha: 0, scaleX: 2, scaleY: 2,
-      duration: 200, onComplete: () => puff.destroy(),
-    });
   }
 
   private spawnProjectile(node: ComboNode): void {
     if (!node.projectile) return;
     this.pendingProjectiles.push({
-      x: this.container.x, y: this.beaWorldY,
+      x: this.container.x, y: this.chestY,
       facingRight: this.facingRight,
       isHeavy: node.input === "H" || node.damage >= 20,
       config: { ...node.projectile, damage: node.damage, knockback: node.knockback, hitstopMs: node.hitstopMs, shakeIntensity: node.shakeIntensity, shakeDuration: node.shakeDuration },
@@ -937,7 +936,7 @@ export class Player {
       this.scene.time.delayedCall(i * 60, () => {
         this.pendingProjectiles.push({
           x: this.container.x,
-          y: this.beaWorldY + (i - 1) * 8,
+          y: this.chestY + (i - 1) * 8,
           facingRight: this.facingRight,
           isHeavy: heavy,
           config: { ...node.projectile!, damage: node.damage, knockback: node.knockback, hitstopMs: node.hitstopMs, shakeIntensity: node.shakeIntensity, shakeDuration: node.shakeDuration },
@@ -951,7 +950,7 @@ export class Player {
     this.pendingProjectiles.push({
       x: this.beaWorldX, y: this.beaWorldY, facingRight: this.facingRight,
       isHeavy: node.input === "H" || node.damage >= 20,
-      config: { radius: 12, speed: 550, color: COLORS.beaFill, maxRange: 300, damage: node.damage, knockback: node.knockback, hitstopMs: node.hitstopMs, shakeIntensity: node.shakeIntensity, shakeDuration: node.shakeDuration },
+      config: { radius: 12, speed: 550, color: COLORS.beaFill, maxRange: 300, damage: node.damage, knockback: node.knockback, hitstopMs: node.hitstopMs, shakeIntensity: node.shakeIntensity, shakeDuration: node.shakeDuration, trailType: "bea" as const },
     });
     this.scene.time.delayedCall(500, () => this.setBeaVisible(true));
   }

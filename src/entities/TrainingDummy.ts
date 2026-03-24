@@ -69,7 +69,7 @@ export class TrainingDummy {
   }
 
   update(dt: number): void {
-    if (!this.alive) return;
+    if (!this.alive || !this.container?.scene) return;
 
     if (this.hitstunTimer > 0) {
       this.hitstunTimer -= dt;

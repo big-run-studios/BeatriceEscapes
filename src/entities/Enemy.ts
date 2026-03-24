@@ -3,6 +3,7 @@ import {
   ENEMY, ENEMY_AI, ARENA, COLORS, aiLerp,
   EnemyTypeDef, EnemyTypeId, ENEMY_TYPES,
 } from "../config/game";
+import { VFXManager } from "../systems/VFXManager";
 
 export type EnemyRole = "engage" | "flank" | "circle" | "evade" | "retreat";
 
@@ -142,6 +143,7 @@ export class Enemy {
 
   // Root (net hit)
   rootTimer = 0;
+  private vfx: VFXManager | null = null;
 
   // Poison DOT
   private poisonTicks = 0;
@@ -296,10 +298,12 @@ export class Enemy {
     this.poisonTimer = Math.min(this.poisonTimer, interval * 0.5);
   }
 
+  setVFX(vfx: VFXManager): void { this.vfx = vfx; }
+
   // ── Main update ──
 
   update(dt: number): void {
-    if (!this.alive) return;
+    if (!this.alive || !this.container?.scene) return;
     this.stateTimer += dt;
     if (this.evadeCooldownTimer > 0) this.evadeCooldownTimer -= dt;
     if (this.rangedCooldown > 0) this.rangedCooldown -= dt;
@@ -1113,26 +1117,11 @@ export class Enemy {
       duration: ENEMY.deathDuration * 1000, ease: "Power2",
     });
 
-    const sparkColor = this.typeDef.visorColor;
-    for (let i = 0; i < 6; i++) {
-      const spark = this.scene.add.circle(
-        this.container.x + (Math.random() - 0.5) * 40,
-        this.container.y + (Math.random() - 0.5) * 30,
-        3, sparkColor, 0.9
-      );
-      spark.setDepth(this.container.y + 5);
-      this.scene.tweens.add({
-        targets: spark,
-        x: spark.x + (Math.random() - 0.5) * 80,
-        y: spark.y - Math.random() * 60,
-        alpha: 0, duration: 300 + Math.random() * 200,
-        onComplete: () => spark.destroy(),
-      });
-    }
+    this.vfx?.deathBurst(this.container.x, this.container.y, this.typeDef.visorColor);
   }
 
   destroy(): void {
-    this.container.destroy();
+    if (this.container?.scene) this.container.destroy();
   }
 
   private updateHpBar(dt: number): void {

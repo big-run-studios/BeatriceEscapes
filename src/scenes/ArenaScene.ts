@@ -10,7 +10,12 @@ import {
 import { InputManager, Action } from "../systems/InputManager";
 import { initPSGlyphs, PromptLine, PromptPart, PS_NAV, IconRef } from "../ui/ButtonGlyphs";
 import { AB_SHEET_KEY, AB_FRAME_W, AB_FRAME_H, registerAndrewBeaAnims } from "../entities/AndrewBeaAnims";
+import { J_SHEET_KEY, J_FRAME_W, J_FRAME_H, registerJohnAnims } from "../entities/JohnAnims";
+import { H_SHEET_KEY, H_FRAME_W, H_FRAME_H, registerHeatherAnims } from "../entities/HeatherAnims";
+import { LD_SHEET_KEY, LL_SHEET_KEY, L_FRAME_W, L_FRAME_H, registerLunaAnims } from "../entities/LunaAnims";
 import { HitFeel } from "../systems/HitFeel";
+import { VFXManager, VFX_SHEET_KEY, VFX_FRAME_W, VFX_FRAME_H } from "../systems/VFXManager";
+import { PROJ_SHEET_KEY, PROJ_FRAME_W, PROJ_FRAME_H } from "../entities/Projectile";
 import { RunState, WaveDef } from "../systems/RunState";
 import { Player } from "../entities/Player";
 import { JohnPlayer } from "../entities/JohnPlayer";
@@ -36,6 +41,7 @@ interface ArenaConfig {
 export class ArenaScene extends Phaser.Scene {
   private input_mgr!: InputManager;
   private hitFeel!: HitFeel;
+  private vfx!: VFXManager;
   private runState!: RunState;
   private player!: PlayerEntity;
   private dummies: TrainingDummy[] = [];
@@ -90,6 +96,30 @@ export class ArenaScene extends Phaser.Scene {
       frameWidth: AB_FRAME_W,
       frameHeight: AB_FRAME_H,
     });
+    this.load.spritesheet(J_SHEET_KEY, `${base}art/characters/john.png`, {
+      frameWidth: J_FRAME_W,
+      frameHeight: J_FRAME_H,
+    });
+    this.load.spritesheet(H_SHEET_KEY, `${base}art/characters/heather.png`, {
+      frameWidth: H_FRAME_W,
+      frameHeight: H_FRAME_H,
+    });
+    this.load.spritesheet(LD_SHEET_KEY, `${base}art/characters/luna-dog.png`, {
+      frameWidth: L_FRAME_W,
+      frameHeight: L_FRAME_H,
+    });
+    this.load.spritesheet(LL_SHEET_KEY, `${base}art/characters/luna-lunar.png`, {
+      frameWidth: L_FRAME_W,
+      frameHeight: L_FRAME_H,
+    });
+    this.load.spritesheet(VFX_SHEET_KEY, `${base}art/vfx/combat-particles.png`, {
+      frameWidth: VFX_FRAME_W,
+      frameHeight: VFX_FRAME_H,
+    });
+    this.load.spritesheet(PROJ_SHEET_KEY, `${base}art/vfx/projectile-sprites.png`, {
+      frameWidth: PROJ_FRAME_W,
+      frameHeight: PROJ_FRAME_H,
+    });
   }
 
   init(data: Partial<ArenaConfig>): void {
@@ -105,7 +135,11 @@ export class ArenaScene extends Phaser.Scene {
     this.input_mgr = new InputManager(this);
     initPSGlyphs(this);
     registerAndrewBeaAnims(this);
-    this.hitFeel = new HitFeel(this);
+    registerJohnAnims(this);
+    registerHeatherAnims(this);
+    registerLunaAnims(this);
+    this.vfx = new VFXManager(this);
+    this.hitFeel = new HitFeel(this, this.vfx);
 
     if (this.config.mode === "run" || this.config.mode === "enemies") {
       const reg = this.game.registry.get("runState") as RunState | undefined;
@@ -146,6 +180,15 @@ export class ArenaScene extends Phaser.Scene {
 
     this.events.on("poison-damage", (x: number, y: number, amount: number) => {
       this.spawnDamageNumber(x, y, amount, 0xcc66ff);
+    });
+
+    this.events.once("shutdown", () => {
+      this.sceneEnding = true;
+      this.enemies = [];
+      this.projectiles = [];
+      this.enemyProjectiles = [];
+      this.pickups = [];
+      this.dummies = [];
     });
 
     const SCROLL_SECTION = GAME_WIDTH;
@@ -327,6 +370,7 @@ export class ArenaScene extends Phaser.Scene {
       const x = cx + 200 + Math.random() * 300;
       const y = cy + (Math.random() - 0.5) * 200;
       const enemy = new Enemy(this, x, y, level);
+      enemy.setVFX(this.vfx);
       this.enemies.push(enemy);
     }
   }
@@ -554,6 +598,7 @@ export class ArenaScene extends Phaser.Scene {
         const x = centerX + 100 + Math.random() * (GAME_WIDTH * 0.25);
         const y = cy + (Math.random() - 0.5) * 200;
         const enemy = new Enemy(this, x, y, wave.level, typeDef);
+        enemy.setVFX(this.vfx);
         enemy.boundsMinX = this.lockLeftX + ARENA.boundaryPadding;
         enemy.boundsMaxX = this.lockRightX - ARENA.boundaryPadding;
         this.enemies.push(enemy);
@@ -654,7 +699,8 @@ export class ArenaScene extends Phaser.Scene {
           hitstopMs: req.isNet ? 0 : 30,
           shakeIntensity: req.isNet ? 0 : 2,
           shakeDuration: req.isNet ? 0 : 40,
-        });
+          trailType: req.isNet ? "net" : "enemy",
+        }, this.vfx);
         (proj as unknown as { isNet?: boolean }).isNet = req.isNet ?? false;
         this.enemyProjectiles.push(proj);
       }
@@ -705,12 +751,7 @@ export class ArenaScene extends Phaser.Scene {
         this.hitFeel.shake(5, 80);
       }
 
-      const flash = this.add.circle(aoe.x, aoe.y - 20, aoe.radius, 0xff4444, 0.3);
-      flash.setDepth(aoe.y + 100);
-      this.tweens.add({
-        targets: flash, alpha: 0, scaleX: 1.3, scaleY: 1.3,
-        duration: 250, onComplete: () => flash.destroy(),
-      });
+      this.vfx.flashBurst(aoe.x, aoe.y - 20, 0xff4444, 6);
     }
   }
 
@@ -748,6 +789,7 @@ export class ArenaScene extends Phaser.Scene {
         const x = enemy.x + side * (120 + i * 60);
         const y = cy + (Math.random() - 0.5) * 80;
         const spawned = new Enemy(this, x, y, enemy.level, typeDef);
+        spawned.setVFX(this.vfx);
         spawned.boundsMinX = enemy.boundsMinX;
         spawned.boundsMaxX = enemy.boundsMaxX;
         this.enemies.push(spawned);
@@ -825,14 +867,7 @@ export class ArenaScene extends Phaser.Scene {
     }
 
     if (!nearest) {
-      const fizzle = this.add.circle(fromX + (Math.random() - 0.5) * 40, fromY - 20, 10, color, 0.6);
-      fizzle.setDepth(fromY + 100);
-      this.tweens.add({
-        targets: fizzle,
-        alpha: 0, scaleX: 2, scaleY: 0.3,
-        duration: 250,
-        onComplete: () => fizzle.destroy(),
-      });
+      this.vfx.magicSparkle(fromX + (Math.random() - 0.5) * 40, fromY - 20, color, 2);
       return;
     }
 
@@ -840,7 +875,8 @@ export class ArenaScene extends Phaser.Scene {
       radius: 6, speed: 600, color, maxRange: range + 50,
       damage, knockback: 60, hitstopMs: 30,
       shakeIntensity: 2, shakeDuration: 40,
-    });
+      trailType: "spark",
+    }, this.vfx);
     this.projectiles.push(sparkProj);
 
     if (bounces > 1) {
@@ -852,32 +888,8 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private spawnLightningAoe(x: number, y: number, damage: number, radius: number, color: number): void {
-    const bolt = this.add.graphics();
-    bolt.setDepth(y + 200);
-    bolt.lineStyle(3, color, 0.9);
-    let bx = x;
-    let by = y - 200;
-    bolt.moveTo(bx, by);
-    for (let i = 0; i < 6; i++) {
-      bx += (Math.random() - 0.5) * 30;
-      by += 33;
-      bolt.lineTo(bx, by);
-    }
-    bolt.lineTo(x, y);
-    bolt.strokePath();
-    this.tweens.add({
-      targets: bolt, alpha: 0, duration: 200,
-      onComplete: () => bolt.destroy(),
-    });
-
-    const flash = this.add.circle(x, y - 30, radius, color, 0.5);
-    flash.setDepth(y + 100);
-    this.tweens.add({
-      targets: flash,
-      alpha: 0, scaleX: 1.5, scaleY: 1.5,
-      duration: 200,
-      onComplete: () => flash.destroy(),
-    });
+    this.vfx.flashBurst(x, y - 30, color, 8);
+    this.vfx.magicSparkle(x, y, color, 4);
 
     for (const enemy of this.enemies) {
       if (!enemy.isAlive) continue;
@@ -894,30 +906,8 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private spawnDamageBurst(x: number, y: number, damage: number, radius: number, color: number): void {
-    const flash = this.add.circle(x, y - 20, radius, color, 0.4);
-    flash.setDepth(y + 100);
-    this.tweens.add({
-      targets: flash,
-      alpha: 0, scaleX: 2, scaleY: 2,
-      duration: 250,
-      onComplete: () => flash.destroy(),
-    });
-
-    const ring = this.add.graphics();
-    ring.setDepth(y + 101);
-    ring.lineStyle(2, color, 0.7);
-    ring.strokeCircle(x, y - 20, radius * 0.3);
-    this.tweens.add({
-      targets: ring, alpha: 0,
-      duration: 300,
-      onUpdate: (_tw, target, _key, _value, progress: number) => {
-        const g = target as Phaser.GameObjects.Graphics;
-        g.clear();
-        g.lineStyle(2, color, 0.7 * (1 - progress));
-        g.strokeCircle(x, y - 20, radius * (0.3 + progress * 1.7));
-      },
-      onComplete: () => ring.destroy(),
-    });
+    this.vfx.flashBurst(x, y - 20, color, 6);
+    this.vfx.projectileImpact(x, y - 20, color);
 
     for (const enemy of this.enemies) {
       if (!enemy.isAlive) continue;
@@ -1153,7 +1143,7 @@ export class ArenaScene extends Phaser.Scene {
   private processProjectileSpawns(): void {
     const reqs = this.player.drainProjectileRequests();
     for (const req of reqs) {
-      const proj = new Projectile(this, req.x, req.y, req.facingRight, req.config);
+      const proj = new Projectile(this, req.x, req.y, req.facingRight, req.config, this.vfx);
       (proj as unknown as { isHeavy?: boolean }).isHeavy = req.isHeavy ?? false;
       this.projectiles.push(proj);
     }
@@ -2117,7 +2107,8 @@ export class ArenaScene extends Phaser.Scene {
             hitstopMs: 25,
             shakeIntensity: 1,
             shakeDuration: 20,
-          });
+            trailType: "fire",
+          }, this.vfx);
           (proj as unknown as { isHeavy: boolean }).isHeavy = true;
           this.projectiles.push(proj);
         }
@@ -2170,16 +2161,8 @@ export class ArenaScene extends Phaser.Scene {
     const pulseRadius = HEATHER_PARRY.pulseRadius;
     const pulseDmg = HEATHER_PARRY.pulseDamage;
 
-    // Expanding purple ring
-    const ring = this.add.circle(this.player.x, this.player.y, 10, HEATHER_COLORS.catalystPulse, 0.4);
-    ring.setStrokeStyle(3, HEATHER_COLORS.catalystPulse);
-    ring.setDepth(this.player.y + 100);
-    this.tweens.add({
-      targets: ring,
-      scaleX: pulseRadius / 10, scaleY: pulseRadius / 20, alpha: 0,
-      duration: 350,
-      onComplete: () => ring.destroy(),
-    });
+    this.vfx.flashBurst(this.player.x, this.player.y, HEATHER_COLORS.catalystPulse, 8);
+    this.vfx.magicSparkle(this.player.x, this.player.y, HEATHER_COLORS.catalystPulse, 4);
 
     for (const enemy of this.enemies) {
       if (!enemy.isAlive) continue;
@@ -2241,18 +2224,7 @@ export class ArenaScene extends Phaser.Scene {
       heather.pendingUltBlast = false;
       this.resonanceField = { timer: 0, tickTimer: 0 };
 
-      const fieldCircle = this.add.circle(
-        this.player.x, this.player.y,
-        HEATHER_ULTIMATE.fieldRadius * 0.3, HEATHER_COLORS.auraColor, 0.1,
-      );
-      fieldCircle.setStrokeStyle(3, HEATHER_COLORS.catalystPulse);
-      fieldCircle.setDepth(this.player.y - 1);
-      this.tweens.add({
-        targets: fieldCircle,
-        scaleX: 3.3, scaleY: 2, alpha: 0.15,
-        duration: 300,
-        onComplete: () => fieldCircle.destroy(),
-      });
+      this.vfx.flashBurst(this.player.x, this.player.y, HEATHER_COLORS.auraColor, 10);
     }
 
     if (!this.resonanceField) return;
@@ -2265,20 +2237,14 @@ export class ArenaScene extends Phaser.Scene {
       return;
     }
 
-    // Periodic visual
     if (Math.random() < 0.1) {
       const angle = Math.random() * Math.PI * 2;
       const dist = Math.random() * HEATHER_ULTIMATE.fieldRadius;
-      const dot = this.add.circle(
+      this.vfx.magicSparkle(
         this.player.x + Math.cos(angle) * dist,
         this.player.y + Math.sin(angle) * dist * 0.3,
-        3, HEATHER_COLORS.catalystPulse, 0.4,
+        HEATHER_COLORS.catalystPulse, 1,
       );
-      dot.setDepth(this.player.y + 50);
-      this.tweens.add({
-        targets: dot, alpha: 0, y: dot.y - 10,
-        duration: 500, onComplete: () => dot.destroy(),
-      });
     }
 
     // Tick effects

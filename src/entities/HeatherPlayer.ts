@@ -12,6 +12,7 @@ import { BoonState } from "../systems/BoonState";
 import { ProjectileSpawnRequest, MeleeHitBox, AoeHit } from "./Player";
 import { TrainingDummy } from "./TrainingDummy";
 import { PlayerEntity } from "./PlayerEntity";
+import { H_SHEET_KEY, H_SPRITE_SCALE } from "./HeatherAnims";
 
 const HP_BAR_W = 40;
 const HP_BAR_H = 4;
@@ -30,12 +31,8 @@ export class HeatherPlayer implements PlayerEntity {
   readonly container: Phaser.GameObjects.Container;
   readonly combat: CombatStateMachine;
 
-  private body: Phaser.GameObjects.Rectangle;
-  private head: Phaser.GameObjects.Rectangle;
-  private hair: Phaser.GameObjects.Rectangle;
-  private scarf: Phaser.GameObjects.Rectangle;
-  private staff: Phaser.GameObjects.Rectangle;
-  private staffTip: Phaser.GameObjects.Ellipse;
+  private sprite: Phaser.GameObjects.Sprite;
+  private useSpriteSheet: boolean;
   private shadow: Phaser.GameObjects.Ellipse;
 
   private hpBarBg: Phaser.GameObjects.Rectangle;
@@ -66,9 +63,6 @@ export class HeatherPlayer implements PlayerEntity {
   totemMpRegenMult = 1;
   totemDamageReduction = 0;
 
-  private bodyBaseY = 0;
-  private headBaseY: number;
-
   private jumpOffset = 0;
   private jumpVelocity = 0;
   private airAttackLanded = false;
@@ -95,6 +89,9 @@ export class HeatherPlayer implements PlayerEntity {
   // Hover
   private hoverTimer = 0;
   private isHovering = false;
+  private hoverPhaseT = 0;
+  private hoverStartY = 0;
+  private hoverDescending = false;
   private wardChargeCircle: Phaser.GameObjects.Ellipse | null = null;
 
   // Totem cooldowns (per type)
@@ -131,18 +128,17 @@ export class HeatherPlayer implements PlayerEntity {
 
     this.shadow = scene.add.ellipse(0, H / 2 + 4, W + 14, 12, 0x000000, 0.3);
 
-    this.body = scene.add.rectangle(0, 0, W, H, HEATHER_COLORS.bodyColor);
-    this.body.setStrokeStyle(2, HEATHER_COLORS.outlineColor);
+    this.useSpriteSheet = scene.textures.exists(H_SHEET_KEY);
 
-    this.head = scene.add.rectangle(0, -H / 2 - 10, W * 0.6, 20, HEATHER_COLORS.bodyColor);
-    this.head.setStrokeStyle(2, HEATHER_COLORS.outlineColor);
-
-    this.hair = scene.add.rectangle(0, -H / 2 - 18, W * 0.7, 10, HEATHER_COLORS.hairColor);
-    this.scarf = scene.add.rectangle(0, -H / 2 + 6, W * 0.55, 6, HEATHER_COLORS.scarfColor);
-
-    this.staff = scene.add.rectangle(W / 2 + 4, -10, 5, H * 0.9, HEATHER_COLORS.staffColor);
-    this.staff.setStrokeStyle(1, 0x664488);
-    this.staffTip = scene.add.ellipse(W / 2 + 4, -H * 0.45 - 10, 10, 10, HEATHER_COLORS.staffTip);
+    if (this.useSpriteSheet) {
+      this.sprite = scene.add.sprite(0, 0, H_SHEET_KEY, 0);
+      this.sprite.setOrigin(0.5, 1.0);
+      this.sprite.setScale(H_SPRITE_SCALE);
+      this.sprite.y = H / 2 + 4;
+    } else {
+      this.sprite = scene.add.sprite(0, 0, "__DEFAULT");
+      this.sprite.setVisible(false);
+    }
 
     const barY = H / 2 + 14;
     this.hpBarBg = scene.add.rectangle(0, barY, HP_BAR_W, HP_BAR_H, 0x1a1a1a);
@@ -154,14 +150,10 @@ export class HeatherPlayer implements PlayerEntity {
     });
 
     this.container = scene.add.container(x, y, [
-      this.shadow, this.body, this.head, this.hair, this.scarf,
-      this.staff, this.staffTip,
+      this.shadow, this.sprite,
       this.hpBarBg, this.hpBarFill, this.mpBarBg, this.mpBarFill,
       this.statusIconText,
     ]);
-
-    this.bodyBaseY = 0;
-    this.headBaseY = -H / 2 - 10;
   }
 
   get x(): number { return this.container.x; }
@@ -212,7 +204,7 @@ export class HeatherPlayer implements PlayerEntity {
   // ── Update Loop ──
 
   update(dt: number): void {
-    if (this.isDead) return;
+    if (this.isDead || !this.container?.scene) return;
     this.combat.update(dt);
     this.regenMp(dt);
     this.updateCooldowns(dt);
@@ -336,15 +328,12 @@ export class HeatherPlayer implements PlayerEntity {
     if (this.combat.isHitstun || this.combat.isKnockdown) {
       this.chargeType = null;
       this.chargeTimer = 0;
-      this.staffTip.setFillStyle(HEATHER_COLORS.staffTip);
       this.destroyChargeCircle();
     }
   }
 
   private applyChargeVisual(): void {
     if (!this.chargeType) return;
-    const cfg = TOTEM_CONFIG[this.chargeType];
-    this.staffTip.setFillStyle(cfg.color);
 
     if (this.chargeCircle) {
       const progress = Math.min(this.chargeTimer / HEATHER_CHARGE.chargeTime, 1);
@@ -357,14 +346,12 @@ export class HeatherPlayer implements PlayerEntity {
   private completeCharge(type: TotemType): void {
     if (this.totemCooldowns[type] > 0) {
       this.onDryFire();
-      this.staffTip.setFillStyle(HEATHER_COLORS.staffTip);
       this.destroyChargeCircle();
       return;
     }
     const cost = TOTEM_CONFIG.mpCost[type];
     if (this.mp < cost) {
       this.onDryFire();
-      this.staffTip.setFillStyle(HEATHER_COLORS.staffTip);
       this.destroyChargeCircle();
       return;
     }
@@ -372,7 +359,6 @@ export class HeatherPlayer implements PlayerEntity {
     this.mp -= cost;
     this.totemCooldowns[type] = TOTEM_CONFIG.cooldown;
     this.pendingTotemSpawn = { type, x: this.container.x, y: this.container.y };
-    this.staffTip.setFillStyle(HEATHER_COLORS.staffTip);
 
     // Flash the charge circle out on successful placement
     if (this.chargeCircle) {
@@ -430,8 +416,10 @@ export class HeatherPlayer implements PlayerEntity {
         if (!this.isHovering) {
           this.isHovering = true;
           this.hoverTimer = 0;
+          this.hoverPhaseT = 0;
+          this.hoverDescending = false;
+          this.hoverStartY = this.jumpOffset;
           this.hoverAltitude = -JUMP.height * 0.75;
-          this.jumpOffset = this.hoverAltitude;
           this.jumpVelocity = 0;
 
           const wardCfg = TOTEM_CONFIG.ward;
@@ -581,15 +569,14 @@ export class HeatherPlayer implements PlayerEntity {
     this.combat.enterJump();
     this.jumpVelocity = -JUMP.height * 0.75 / (JUMP.duration / 2);
     this.jumpOffset = 0;
-    this.isHovering = false;
-    this.hoverTimer = 0;
+    this.cleanupHover();
   }
 
   private onAirAttackInput(): void {
     this.combat.enterAirAttack();
     this.airAttackLanded = false;
     this.jumpVelocity = AIR_ATTACK.dropSpeed;
-    this.isHovering = false;
+    this.cleanupHover();
   }
 
   // ── Hover ──
@@ -600,26 +587,53 @@ export class HeatherPlayer implements PlayerEntity {
     if (!this.isHovering || !this.combat.isJumping) return;
 
     this.hoverTimer += dt;
-
+    this.hoverPhaseT += dt;
     this.jumpVelocity = 0;
-    this.jumpOffset = this.hoverAltitude;
 
-    // Growing ground circle for ward charge
-    if (this.wardChargeCircle) {
-      const progress = Math.min(this.hoverTimer / HEATHER_CHARGE.wardHoverRequired, 1);
-      this.wardChargeCircle.setScale(progress);
-      this.wardChargeCircle.setPosition(this.container.x, this.container.y);
-      this.wardChargeCircle.setAlpha(0.1 + progress * 0.3);
-    }
+    const TRANSITION = 0.5;
 
-    // Auto-place ward totem the moment charge completes
-    if (this.hoverTimer >= HEATHER_CHARGE.wardHoverRequired && this.wardChargeCircle) {
-      this.placeWardFromHover();
-    }
+    if (!this.hoverDescending) {
+      if (this.hoverPhaseT < TRANSITION) {
+        const t = this.hoverPhaseT / TRANSITION;
+        const eased = 1 - (1 - t) * (1 - t);
+        this.jumpOffset = this.hoverStartY + (this.hoverAltitude - this.hoverStartY) * eased;
+      } else {
+        this.jumpOffset = this.hoverAltitude;
+      }
 
-    // If hold released or max hover time reached, start falling
-    if (!this.inputMgr.isDown(Action.JUMP) || this.hoverTimer >= HEATHER_CHARGE.hoverMaxDuration) {
-      this.endHover();
+      if (this.wardChargeCircle) {
+        const progress = Math.min(this.hoverTimer / HEATHER_CHARGE.wardHoverRequired, 1);
+        this.wardChargeCircle.setScale(progress);
+        this.wardChargeCircle.setPosition(this.container.x, this.container.y);
+        this.wardChargeCircle.setAlpha(0.1 + progress * 0.3);
+      }
+
+      if (this.hoverTimer >= HEATHER_CHARGE.wardHoverRequired && this.wardChargeCircle) {
+        this.placeWardFromHover();
+      }
+
+      if (!this.inputMgr.isDown(Action.JUMP) || this.hoverTimer >= HEATHER_CHARGE.hoverMaxDuration) {
+        this.hoverDescending = true;
+        this.hoverPhaseT = 0;
+        if (this.wardChargeCircle) {
+          this.wardChargeCircle.destroy();
+          this.wardChargeCircle = null;
+        }
+      }
+    } else {
+      const t = Math.min(this.hoverPhaseT / TRANSITION, 1);
+      const eased = t * t;
+      this.jumpOffset = this.hoverAltitude * (1 - eased);
+
+      if (t >= 1) {
+        this.jumpOffset = 0;
+        this.jumpVelocity = 0;
+        this.isHovering = false;
+        this.hoverDescending = false;
+        this.hoverAltitude = 0;
+        this.hoverTimer = 0;
+        this.combat.toIdle();
+      }
     }
   }
 
@@ -658,19 +672,15 @@ export class HeatherPlayer implements PlayerEntity {
     });
   }
 
-  private endHover(): void {
+  private cleanupHover(): void {
     this.isHovering = false;
+    this.hoverDescending = false;
     this.hoverAltitude = 0;
-    const gravity = (2 * JUMP.height) / Math.pow(JUMP.duration / 2, 2);
-    this.jumpVelocity = gravity * 0.5;
-
-    // Clean up ward circle if it wasn't already consumed
+    this.hoverTimer = 0;
     if (this.wardChargeCircle) {
       this.wardChargeCircle.destroy();
       this.wardChargeCircle = null;
     }
-
-    this.hoverTimer = 0;
   }
 
   // ── Dash ──
@@ -812,7 +822,6 @@ export class HeatherPlayer implements PlayerEntity {
     if (this.chargeType) {
       this.chargeType = null;
       this.chargeTimer = 0;
-      this.staffTip.setFillStyle(HEATHER_COLORS.staffTip);
       this.destroyChargeCircle();
     }
 
@@ -830,7 +839,7 @@ export class HeatherPlayer implements PlayerEntity {
     this.hitFeel.shake(3, 60);
     this.combat.enterHitstun();
     this.iFrameTimer = PLAYER_HIT.iFrameDuration;
-    this.isHovering = false;
+    this.cleanupHover();
   }
 
   // ── Movement ──
@@ -997,20 +1006,14 @@ export class HeatherPlayer implements PlayerEntity {
   }
 
   private applyUltSetupVisual(): void {
+    if (this.useSpriteSheet) {
+      this.sprite.play("h-ultimate", true);
+    }
     const progress = this.combat.stateTimer / HEATHER_ULTIMATE.setupDuration;
     if (progress > 0.2 && Math.random() < 0.15) {
-      const rune = this.scene.add.circle(
-        this.container.x + (Math.random() - 0.5) * 40,
-        this.container.y + 10,
-        5, HEATHER_COLORS.catalystPulse, 0.6,
-      );
-      rune.setDepth(this.container.y + 100);
-      this.scene.tweens.add({
-        targets: rune,
-        y: rune.y - 20, alpha: 0, scaleX: 2, scaleY: 2,
-        duration: 400,
-        onComplete: () => rune.destroy(),
-      });
+      const x = this.container.x + (Math.random() - 0.5) * 40;
+      const y = this.container.y + 10;
+      this.hitFeel.vfx.magicSparkle(x, y, HEATHER_COLORS.catalystPulse, 1);
     }
   }
 
@@ -1028,9 +1031,11 @@ export class HeatherPlayer implements PlayerEntity {
 
   private handleHitstun(dt: number): void {
     this.applyKnockback(dt);
-    const shake = (Math.random() - 0.5) * 4;
-    this.body.x = shake; this.head.x = shake;
-    this.body.y = this.bodyBaseY; this.head.y = this.headBaseY;
+    if (this.useSpriteSheet) {
+      const shake = (Math.random() - 0.5) * 4;
+      this.sprite.x = shake;
+      this.sprite.play("h-hit", true);
+    }
     if (this.combat.stateTimer >= PLAYER_HIT.hitstunDuration) {
       this.combat.toIdle();
       this.resetPose();
@@ -1039,23 +1044,20 @@ export class HeatherPlayer implements PlayerEntity {
 
   private handleKnockdown(dt: number): void {
     this.applyKnockback(dt);
-    const totalDown = PLAYER_HIT.knockdownDuration + PLAYER_HIT.knockdownLieDuration;
-    const t = this.combat.stateTimer;
-    if (t < PLAYER_HIT.knockdownDuration) {
-      const p = t / PLAYER_HIT.knockdownDuration;
-      this.body.y = this.bodyBaseY + p * 25;
-      this.body.scaleY = 1 - p * 0.6;
-      this.body.scaleX = 1 + p * 0.3;
-      this.head.y = this.headBaseY + p * 30;
-      this.head.scaleY = 1 - p * 0.4;
+    if (this.useSpriteSheet) {
+      this.sprite.play("h-knockdown", true);
     }
-    if (t >= totalDown) {
+    const totalDown = PLAYER_HIT.knockdownDuration + PLAYER_HIT.knockdownLieDuration;
+    if (this.combat.stateTimer >= totalDown) {
       this.combat.enterRecovering();
       this.iFrameFlashTimer = 0;
     }
   }
 
   private handleRecovery(): void {
+    if (this.useSpriteSheet) {
+      this.sprite.play("h-recovery", true);
+    }
     if (this.combat.stateTimer >= PLAYER_HIT.recoveryDuration) {
       this.combat.toIdle();
       this.container.setAlpha(1);
@@ -1099,153 +1101,109 @@ export class HeatherPlayer implements PlayerEntity {
   // ── Visuals ──
 
   private applyVisualState(): void {
+    if (!this.useSpriteSheet) return;
+
     const jOff = this.jumpOffset;
-    this.body.y = this.bodyBaseY + jOff;
-    this.head.y = this.headBaseY + jOff;
-    this.hair.y = -HEATHER.height / 2 - 18 + jOff;
-    this.scarf.y = -HEATHER.height / 2 + 6 + jOff;
-    this.staff.y = -10 + jOff;
-    this.staffTip.y = -HEATHER.height * 0.45 - 10 + jOff;
+    const H = HEATHER.height;
+    this.sprite.y = H / 2 + 4 + jOff;
     this.shadow.scaleX = 1 - Math.abs(jOff) / 300;
     this.shadow.scaleY = 1 - Math.abs(jOff) / 300;
 
     if (this.combat.isAttacking && this.currentMove) {
       this.applyAttackPose();
     } else if (this.combat.isDashing) {
-      this.applyDashPose();
+      this.sprite.play("h-dash", true);
     } else if (this.combat.isDashAttacking) {
-      this.applyDashAttackPose();
+      this.sprite.play("h-dash-attack", true);
     } else if (this.isHovering) {
       this.applyHoverVisual();
+    } else if (this.combat.isJumping) {
+      this.sprite.play("h-jump", true);
+    } else if (this.combat.isAirAttacking) {
+      this.sprite.play("h-air-attack", true);
     } else {
-      this.resetPose();
+      const vel = Math.abs(this.prevMoveX);
+      if (vel > 0.7) {
+        this.sprite.play("h-run", true);
+      } else if (vel > 0.1) {
+        this.sprite.play("h-walk", true);
+      } else {
+        this.sprite.play("h-idle", true);
+      }
     }
   }
 
+  private static readonly MOVE_ANIM_MAP: Record<string, string> = {
+    "Staff Tap": "h-staff-tap",
+    "Staff Thrust": "h-staff-thrust",
+    "Rising Staff": "h-rising-staff",
+    "Low Sweep": "h-low-sweep",
+    "Staff Slam": "h-staff-slam",
+    "Lunging Smash": "h-staff-thrust",
+    "Skyward Sweep": "h-skyward-sweep",
+    "Ground Strike": "h-ground-strike",
+  };
+
   private applyAttackPose(): void {
     if (!this.currentMove) return;
-    const move = this.currentMove;
-    const p = Math.min(this.combat.stateTimer / move.duration, 1);
-    const swing = Math.sin(p * Math.PI);
-    const jOff = this.jumpOffset;
-
-    if (move.moveType === "rush") {
-      this.body.scaleX = 1 + swing * 0.15;
-      this.body.scaleY = 1 - swing * 0.1;
-      this.head.x = swing * 5;
-      this.head.y = this.headBaseY + swing * 2 + jOff;
-      this.staff.setAngle(swing * -30);
-    } else if (move.moveType === "aoe") {
-      const rise = p < 0.5 ? swing * 8 : 0;
-      const slam = p >= 0.5 ? (p - 0.5) * 2 : 0;
-      this.body.scaleY = 1 - slam * 0.2;
-      this.body.scaleX = 1 + slam * 0.12;
-      this.head.y = this.headBaseY - rise + jOff;
-      this.body.y = this.bodyBaseY + slam * 5 + jOff;
-      this.staff.setAngle(slam * -45);
-    } else if (move.button === "H") {
-      this.body.scaleX = 1 + swing * 0.06;
-      this.head.x = swing * 3;
-      this.head.y = this.headBaseY - swing * 2 + jOff;
-      this.staff.setAngle(swing * -40);
+    const anim = HeatherPlayer.MOVE_ANIM_MAP[this.currentMove.name];
+    if (anim) {
+      this.sprite.play(anim, true);
+    } else if (this.currentMove.moveType === "rush") {
+      this.sprite.play("h-staff-thrust", true);
+    } else if (this.currentMove.moveType === "aoe") {
+      this.sprite.play("h-ground-strike", true);
     } else {
-      const lunge = swing * 8;
-      this.body.scaleX = 1 + swing * 0.08;
-      this.body.scaleY = 1 - swing * 0.1;
-      this.head.x = lunge * 0.3;
-      this.head.y = this.headBaseY - lunge * 0.15 + jOff;
-      this.staff.setAngle(swing * -20);
+      this.sprite.play("h-staff-tap", true);
     }
   }
 
   private applyHoverVisual(): void {
+    if (!this.useSpriteSheet) return;
     const bob = Math.sin(this.hoverTimer * 4) * 3;
     const jOff = this.jumpOffset + bob;
-    this.body.y = this.bodyBaseY + jOff;
-    this.head.y = this.headBaseY + jOff;
-    this.hair.y = -HEATHER.height / 2 - 18 + jOff;
-    this.scarf.y = -HEATHER.height / 2 + 6 + jOff;
-    this.staff.y = -10 + jOff;
-    this.staffTip.y = -HEATHER.height * 0.45 - 10 + jOff;
+    this.sprite.y = HEATHER.height / 2 + 4 + jOff;
 
-    // Purple glow particles while hovering
-    if (Math.random() < 0.2) {
-      const glow = this.scene.add.circle(
-        this.container.x + (Math.random() - 0.5) * HEATHER.width,
-        this.container.y + jOff + HEATHER.height / 2,
-        3, HEATHER_COLORS.auraColor, 0.5,
-      );
-      glow.setDepth(this.container.y - 1);
-      this.scene.tweens.add({
-        targets: glow,
-        y: glow.y + 15, alpha: 0,
-        duration: 400,
-        onComplete: () => glow.destroy(),
-      });
-    }
-  }
-
-  private applyDashPose(): void {
-    this.body.scaleX = 1.25;
-    this.body.scaleY = 0.88;
-    this.head.x = this.dashDir * 4;
-    this.staff.setAngle(-15);
-  }
-
-  private applyDashAttackPose(): void {
-    const p = Math.min(this.combat.stateTimer / DASH.attackDuration, 1);
-    const swing = Math.sin(p * Math.PI);
-    if (this.dashAttackType === "heavy") {
-      this.body.scaleX = 1.15 + swing * 0.12;
-      this.body.scaleY = 1 - swing * 0.12;
-      this.head.x = this.dashDir * swing * 8;
-      this.staff.setAngle(swing * -50);
+    if (this.chargeType) {
+      this.sprite.play("h-hover-charge", true);
     } else {
-      this.body.scaleX = 1.1;
-      this.head.x = swing * 5;
-      this.staff.setAngle(swing * -25);
+      this.sprite.play("h-hover", true);
+    }
+
+    if (Math.random() < 0.2) {
+      this.hitFeel.vfx.magicSparkle(
+        this.container.x,
+        this.container.y + jOff + HEATHER.height / 2,
+        HEATHER_COLORS.auraColor,
+        1,
+      );
     }
   }
 
   private applyParryPose(): void {
-    this.body.y = this.bodyBaseY + 4;
-    this.body.scaleX = 1.12;
-    this.body.scaleY = 0.92;
-    this.head.y = this.headBaseY + 5;
-    this.staff.setAngle(20);
+    if (!this.useSpriteSheet) return;
+    const isCounter = this.combat.isParryRecovery;
+    this.sprite.play(isCounter ? "h-parry-counter" : "h-parry", true);
     const flash = Math.sin(this.combat.stateTimer * 40) > 0;
-    this.body.setFillStyle(flash ? 0xffffff : HEATHER_COLORS.bodyColor);
+    this.sprite.setAlpha(flash ? 1 : 0.7);
   }
 
   private applyHitstopVisual(): void {
+    if (!this.useSpriteSheet) return;
     const shake = (Math.random() - 0.5) * 3;
-    this.body.x = shake;
-    this.head.x = shake;
+    this.sprite.x = shake;
   }
 
   private resetPose(): void {
-    this.body.y = this.bodyBaseY + this.jumpOffset;
-    this.body.scaleX = 1;
-    this.body.scaleY = 1;
-    this.body.x = 0;
-    this.body.setFillStyle(HEATHER_COLORS.bodyColor);
-    this.head.y = this.headBaseY + this.jumpOffset;
-    this.head.x = 0;
-    this.head.scaleY = 1;
-    this.staff.setAngle(0);
-    this.staffTip.setFillStyle(HEATHER_COLORS.staffTip);
+    if (!this.useSpriteSheet) return;
+    this.sprite.x = 0;
+    this.sprite.y = HEATHER.height / 2 + 4 + this.jumpOffset;
+    this.sprite.setScale(H_SPRITE_SCALE);
+    this.sprite.setAlpha(1);
   }
 
   private spawnAfterimage(): void {
-    const ghost = this.scene.add.rectangle(
-      this.container.x, this.container.y,
-      HEATHER.width, HEATHER.height, HEATHER_COLORS.bodyColor, 0.3,
-    );
-    ghost.setDepth(this.container.y - 1);
-    this.scene.tweens.add({
-      targets: ghost, alpha: 0, duration: 200,
-      onComplete: () => ghost.destroy(),
-    });
+    this.hitFeel.vfx.dashDust(this.container.x, this.container.y + HEATHER.height / 2);
   }
 
   private fireSwingVFX(move: HeatherMoveDef): void {
@@ -1276,15 +1234,9 @@ export class HeatherPlayer implements PlayerEntity {
   private onDryFire(): void {
     this.hitFeel.shake(1, 20);
     const dir = this.facingRight ? 1 : -1;
-    const puff = this.scene.add.circle(
-      this.container.x + dir * 15, this.container.y - 10,
-      6, 0x888888, 0.5,
-    );
-    puff.setDepth(this.container.y + 2);
-    this.scene.tweens.add({
-      targets: puff, alpha: 0, scaleX: 2, scaleY: 2,
-      duration: 200, onComplete: () => puff.destroy(),
-    });
+    const x = this.container.x + dir * 15;
+    const y = this.container.y - 10;
+    this.hitFeel.vfx.flashBurst(x, y, 0x888888, 2);
   }
 
   private clampToBounds(): void {
