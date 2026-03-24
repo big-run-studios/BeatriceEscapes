@@ -282,18 +282,24 @@ export class TitleScene extends Phaser.Scene {
 
   private startAudio(): void {
     const audio = AudioManager.instance;
+    const cleanup = () => {
+      this.input.off("pointerdown", unlock);
+      document.removeEventListener("keydown", unlock);
+      document.removeEventListener("touchend", unlock);
+      document.removeEventListener("click", unlock);
+    };
     const unlock = () => {
       if (this.audioUnlocked) return;
       this.audioUnlocked = true;
-      audio.resumeContext().then(() => {
+      cleanup();
+      const ctx = audio.context;
+      if (ctx.state !== "running") {
+        try { ctx.resume(); } catch { /* */ }
+      }
+      setTimeout(() => {
         if (!this.accepted) audio.playMusic("title");
-      });
-      this.input.off("pointerdown", unlock);
-      document.removeEventListener("keydown", keyHandler);
-      document.removeEventListener("touchstart", touchHandler);
+      }, 100);
     };
-    const keyHandler = () => unlock();
-    const touchHandler = () => unlock();
     if (audio.context.state === "running") {
       this.audioUnlocked = true;
       audio.playMusic("title");
@@ -301,8 +307,9 @@ export class TitleScene extends Phaser.Scene {
       return;
     } else {
       this.input.on("pointerdown", unlock);
-      document.addEventListener("keydown", keyHandler, { once: true });
-      document.addEventListener("touchstart", touchHandler, { once: true });
+      document.addEventListener("keydown", unlock, { once: true });
+      document.addEventListener("touchend", unlock, { once: true });
+      document.addEventListener("click", unlock, { once: true });
     }
   }
 

@@ -1,4 +1,5 @@
 import { AudioManager } from "../systems/AudioManager";
+import { InputManager } from "../systems/InputManager";
 
 const MAX_ERRORS = 5;
 const HUD_UPDATE_INTERVAL = 500;
@@ -159,12 +160,14 @@ export class DiagnosticsOverlay {
       : [];
     const gpStatus = gpList.length > 0 ? gpList[0]!.substring(0, 30) : "none";
 
+    const dev = InputManager.globalDevice;
+
     const lines = [
       `🖥 ${this.platform.browser} | ${this.platform.os}`,
       `📐 ${this.platform.screen} | touch:${this.platform.touch}`,
       `🔊 ctx:${dbg.contextState} | trk:${dbg.currentTrack}`,
       `   conn:${dbg.connected} | hb:${dbg.heartbeatAge}ms`,
-      `🎮 ${gpStatus} | dev:${this._inputDevice}`,
+      `🎮 ${gpStatus} | dev:${dev}`,
       `🎬 ${this._activeScenes.join(",")}`,
     ];
     this.hudElement.textContent = lines.join("\n");

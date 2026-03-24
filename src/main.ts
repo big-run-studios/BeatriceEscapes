@@ -53,11 +53,15 @@ window.addEventListener("beforeunload", () => AudioManager.instance.dispose());
 
 const onInteraction = () => {
   AudioManager.instance.noteInteraction();
-  AudioManager.instance.resumeContext();
+  const ctx = AudioManager.instance.context;
+  if (ctx.state !== "running") {
+    try { ctx.resume(); } catch { /* */ }
+  }
 };
 document.addEventListener("pointerdown", onInteraction);
 document.addEventListener("keydown", onInteraction);
-document.addEventListener("touchstart", onInteraction);
+document.addEventListener("touchend", onInteraction);
+document.addEventListener("click", onInteraction);
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
