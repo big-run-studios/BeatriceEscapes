@@ -117,6 +117,7 @@ export class InputManager {
   private _gamepadId = "";
   private _lastDevice: InputDevice = "keyboard";
   private _hasReceivedInput = false;
+  private _pointerJustDown = false;
 
   private prevStickX = 0;
   private prevStickY = 0;
@@ -126,6 +127,7 @@ export class InputManager {
     this.keyMap = DEFAULT_KEYBOARD_MAP;
     this.padMap = DEFAULT_GAMEPAD_MAP;
     this.setupKeyboard();
+    this.scene.input.on("pointerdown", () => { this._pointerJustDown = true; });
   }
 
   /** The most recently used input device. Defaults to gamepad if one is connected before any input. */
@@ -149,11 +151,26 @@ export class InputManager {
 
   private get pad(): Phaser.Input.Gamepad.Gamepad | null {
     if (!this.scene.input.gamepad) return null;
-    const p = this.scene.input.gamepad.getPad(0);
+    let p = this.scene.input.gamepad.getPad(0);
+    if (!p && typeof navigator.getGamepads === "function") {
+      const native = navigator.getGamepads();
+      for (let i = 0; i < native.length; i++) {
+        if (native[i]) {
+          p = this.scene.input.gamepad.getPad(i);
+          if (p) break;
+        }
+      }
+    }
     if (p) {
+      if (!this._gamepadConnected) {
+        console.log(`[InputManager] Gamepad connected: ${p.id}`);
+      }
       this._gamepadConnected = true;
       this._gamepadId = p.id;
     } else {
+      if (this._gamepadConnected) {
+        console.log("[InputManager] Gamepad disconnected");
+      }
       this._gamepadConnected = false;
       this._gamepadId = "";
     }
@@ -192,10 +209,16 @@ export class InputManager {
       this.setDevice("keyboard");
       return true;
     }
+    if (action === Action.CONFIRM && this._pointerJustDown) {
+      return true;
+    }
     return false;
   }
 
   private setDevice(device: InputDevice): void {
+    if (this._hasReceivedInput && this._lastDevice !== device) {
+      console.log(`[InputManager] Device switched: ${this._lastDevice} -> ${device}`);
+    }
     this._lastDevice = device;
     this._hasReceivedInput = true;
   }
@@ -262,6 +285,7 @@ export class InputManager {
 
   /** Call at end of update() to sync previous-frame state for justPressed. */
   postUpdate(): void {
+    this._pointerJustDown = false;
     const gamepad = this.pad;
     if (gamepad) {
       for (const mapping of this.padMap) {

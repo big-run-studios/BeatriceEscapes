@@ -11,6 +11,7 @@ import { setupAutoplay } from "./debug/autoplay";
 import { AudioManager } from "./systems/AudioManager";
 import { registerAllProceduralSFX } from "./systems/ProceduralSFX";
 import { STINGS } from "./config/audio";
+import { initDiagnostics } from "./debug/DiagnosticsOverlay";
 
 AudioManager.instance.init();
 registerAllProceduralSFX();
@@ -42,9 +43,18 @@ const config: Phaser.Types.Core.GameConfig = {
 const game = new Phaser.Game(config);
 setupAutoplay(game);
 
+const debugEnabled = new URLSearchParams(window.location.search).get("debug") === "true";
+if (debugEnabled) {
+  initDiagnostics(game);
+  AudioManager.instance.debug = true;
+}
+
 window.addEventListener("beforeunload", () => AudioManager.instance.dispose());
 
-const onInteraction = () => AudioManager.instance.noteInteraction();
+const onInteraction = () => {
+  AudioManager.instance.noteInteraction();
+  AudioManager.instance.resumeContext();
+};
 document.addEventListener("pointerdown", onInteraction);
 document.addEventListener("keydown", onInteraction);
 document.addEventListener("touchstart", onInteraction);

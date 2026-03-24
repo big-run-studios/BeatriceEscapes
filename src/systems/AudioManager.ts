@@ -107,10 +107,13 @@ export class AudioManager {
     });
   }
 
-  /** Resume context after user gesture (browser autoplay policy). */
+  /** Resume context after user gesture (browser autoplay policy).
+   *  Handles iOS-specific "interrupted" state in addition to "suspended". */
   async resumeContext(): Promise<void> {
-    if (this.ctx.state === "suspended") {
-      await this.ctx.resume();
+    if (this.ctx.state !== "running") {
+      try {
+        await this.ctx.resume();
+      } catch { /* iOS may reject resume outside gesture context */ }
     }
   }
 
@@ -178,7 +181,7 @@ export class AudioManager {
       try { this.currentMusic.gain.disconnect(); } catch { /* */ }
       this.currentMusic = null;
     }
-    if (this.ctx.state === "running") {
+    if (this.ctx.state === "running" || this.ctx.state === "suspended") {
       this.ctx.suspend().catch(() => {});
     }
     this.log("WATCHDOG: suspended context + stopped music — audio killed");
@@ -188,7 +191,7 @@ export class AudioManager {
     if (this._connected) return;
     this._connected = true;
     this.masterGain.connect(this.ctx.destination);
-    if (this.ctx.state === "suspended") this.ctx.resume();
+    if (this.ctx.state !== "running") this.ctx.resume().catch(() => {});
     this.log("RECONNECTED — audio restored");
   }
 

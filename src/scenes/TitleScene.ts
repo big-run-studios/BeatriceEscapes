@@ -297,26 +297,12 @@ export class TitleScene extends Phaser.Scene {
     if (audio.context.state === "running") {
       this.audioUnlocked = true;
       audio.playMusic("title");
+    } else if (audio.context.state === "closed") {
+      return;
     } else {
       this.input.on("pointerdown", unlock);
       document.addEventListener("keydown", keyHandler, { once: true });
       document.addEventListener("touchstart", touchHandler, { once: true });
-    }
-  }
-
-  private tryGamepadAudioUnlock(): void {
-    if (this.audioUnlocked) return;
-    const pad = this.input.gamepad?.getPad(0);
-    if (!pad) return;
-    for (let i = 0; i < pad.buttons.length; i++) {
-      if (pad.buttons[i]?.pressed) {
-        this.audioUnlocked = true;
-        const audio = AudioManager.instance;
-        audio.resumeContext().then(() => {
-          if (!this.accepted) audio.playMusic("title");
-        });
-        return;
-      }
     }
   }
 
@@ -416,7 +402,6 @@ export class TitleScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     AudioManager.instance.heartbeat();
-    this.tryGamepadAudioUnlock();
     this.updateControllerStatus();
     this.updatePromptLabel();
     this.updateMagicCursor(delta);

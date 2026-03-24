@@ -479,12 +479,7 @@ export class NarrativeScene extends Phaser.Scene {
     this.uiObjects.push(divider);
     contentY += 16;
 
-    const maskShape = this.add.graphics();
-    maskShape.fillStyle(0xffffff);
-    maskShape.fillRect(DETAIL_PADDING, contentY, GAME_WIDTH - DETAIL_PADDING * 2, GAME_HEIGHT - contentY - 60);
-    maskShape.setVisible(false);
-    const mask = maskShape.createGeometryMask();
-    this.uiObjects.push(maskShape);
+    const visibleH = GAME_HEIGHT - contentY - 60;
 
     const bodyText = this.add.text(
       DETAIL_PADDING + 20,
@@ -499,7 +494,7 @@ export class NarrativeScene extends Phaser.Scene {
       }
     );
     bodyText.setDepth(16);
-    bodyText.setMask(mask);
+    bodyText.setCrop(0, this.detailScrollY, bodyText.width, visibleH);
     this.uiObjects.push(bodyText);
 
     const visibleHeight = GAME_HEIGHT - contentY - 60;
