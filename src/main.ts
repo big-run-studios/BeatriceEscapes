@@ -47,6 +47,7 @@ window.addEventListener("beforeunload", () => AudioManager.instance.dispose());
 const onInteraction = () => AudioManager.instance.noteInteraction();
 document.addEventListener("pointerdown", onInteraction);
 document.addEventListener("keydown", onInteraction);
+document.addEventListener("touchstart", onInteraction);
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {

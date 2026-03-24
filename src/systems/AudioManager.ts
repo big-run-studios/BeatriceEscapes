@@ -137,15 +137,19 @@ export class AudioManager {
     try {
       this._leaderChannel?.close();
     } catch { /* */ }
-    this._leaderChannel = new BroadcastChannel(TAB_CHANNEL_NAME);
-    this._leaderChannel.onmessage = (e) => {
-      if (e.data?.type === "claim" && e.data.tabId !== this._tabId) {
-        this.log(`Another tab claimed leadership (${e.data.tabId}), disposing audio`);
-        this.dispose();
-      }
-    };
-    this._leaderChannel.postMessage({ type: "claim", tabId: this._tabId });
-    this.log(`Claimed audio leadership (tab=${this._tabId})`);
+    try {
+      this._leaderChannel = new BroadcastChannel(TAB_CHANNEL_NAME);
+      this._leaderChannel.onmessage = (e) => {
+        if (e.data?.type === "claim" && e.data.tabId !== this._tabId) {
+          this.log(`Another tab claimed leadership (${e.data.tabId}), disposing audio`);
+          this.dispose();
+        }
+      };
+      this._leaderChannel.postMessage({ type: "claim", tabId: this._tabId });
+      this.log(`Claimed audio leadership (tab=${this._tabId})`);
+    } catch {
+      this.log("BroadcastChannel unavailable (private browsing?), skipping leader election");
+    }
   }
 
   private startWatchdog(): void {

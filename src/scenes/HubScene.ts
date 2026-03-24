@@ -239,11 +239,13 @@ export class HubScene extends Phaser.Scene {
         heroImg.setDepth(16);
         if (ch.locked) heroImg.setAlpha(0.3);
 
-        const maskGfx = this.make.graphics();
-        maskGfx.fillRect(cardLeft, cardTop, slotW, slotH);
-        heroImg.setMask(maskGfx.createGeometryMask());
+        const cropW = slotW / coverScale;
+        const cropH = slotH / coverScale;
+        const cropX = (srcW - cropW) / 2;
+        const cropY = (srcH - cropH) / 2;
+        heroImg.setCrop(cropX, cropY, cropW, cropH);
 
-        this.panelObjects.push(heroImg, maskGfx);
+        this.panelObjects.push(heroImg);
       }
 
       const gradientH = 100;

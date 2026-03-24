@@ -278,22 +278,45 @@ export class TitleScene extends Phaser.Scene {
     });
   }
 
+  private audioUnlocked = false;
+
   private startAudio(): void {
     const audio = AudioManager.instance;
-    const startTitleMusic = () => {
-      if (this.accepted) return;
+    const unlock = () => {
+      if (this.audioUnlocked) return;
+      this.audioUnlocked = true;
       audio.resumeContext().then(() => {
         if (!this.accepted) audio.playMusic("title");
       });
-      this.input.off("pointerdown", startTitleMusic);
-      document.removeEventListener("keydown", keyUnlock);
+      this.input.off("pointerdown", unlock);
+      document.removeEventListener("keydown", keyHandler);
+      document.removeEventListener("touchstart", touchHandler);
     };
-    const keyUnlock = () => startTitleMusic();
+    const keyHandler = () => unlock();
+    const touchHandler = () => unlock();
     if (audio.context.state === "running") {
+      this.audioUnlocked = true;
       audio.playMusic("title");
     } else {
-      this.input.on("pointerdown", startTitleMusic);
-      document.addEventListener("keydown", keyUnlock, { once: true });
+      this.input.on("pointerdown", unlock);
+      document.addEventListener("keydown", keyHandler, { once: true });
+      document.addEventListener("touchstart", touchHandler, { once: true });
+    }
+  }
+
+  private tryGamepadAudioUnlock(): void {
+    if (this.audioUnlocked) return;
+    const pad = this.input.gamepad?.getPad(0);
+    if (!pad) return;
+    for (let i = 0; i < pad.buttons.length; i++) {
+      if (pad.buttons[i]?.pressed) {
+        this.audioUnlocked = true;
+        const audio = AudioManager.instance;
+        audio.resumeContext().then(() => {
+          if (!this.accepted) audio.playMusic("title");
+        });
+        return;
+      }
     }
   }
 
@@ -393,6 +416,7 @@ export class TitleScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     AudioManager.instance.heartbeat();
+    this.tryGamepadAudioUnlock();
     this.updateControllerStatus();
     this.updatePromptLabel();
     this.updateMagicCursor(delta);
