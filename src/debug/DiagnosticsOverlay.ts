@@ -190,15 +190,16 @@ export class DiagnosticsOverlay {
 }
 
 export function installSceneLogging(game: Phaser.Game): void {
-  const events = game.scene;
-  const logSceneEvent = (eventName: string) => (key: string) => {
-    console.log(`[Scene] ${eventName}: ${key} @ ${performance.now().toFixed(0)}ms`);
-    updateActiveSceneList(game);
-  };
-  const hookableEvents = ["start", "stop", "pause", "resume", "sleep", "wake"] as const;
-  for (const ev of hookableEvents) {
-    (events as unknown as Phaser.Events.EventEmitter).on(ev, logSceneEvent(ev));
-  }
+  let lastSceneKeys = "";
+  setInterval(() => {
+    const active = game.scene.getScenes(true).map(s => s.scene.key);
+    const key = active.join(",");
+    if (key !== lastSceneKeys) {
+      console.log(`[Scene] Active scenes changed: ${lastSceneKeys || "(none)"} -> ${key} @ ${performance.now().toFixed(0)}ms`);
+      lastSceneKeys = key;
+      updateActiveSceneList(game);
+    }
+  }, 250);
 }
 
 function updateActiveSceneList(game: Phaser.Game): void {
